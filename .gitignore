@@ -1,6 +1,7 @@
 # Generated index artifacts
 .index/*
 !.index/.gitkeep
+.brains/
 
 # Python environments and local overrides
 .venv/
