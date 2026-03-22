@@ -5,21 +5,21 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from brain import cli
-from brain.commands import health as health_commands
-from brain.commands import pdf as pdf_commands
-from brain.commands import research as research_commands
-from brain.commands import vault as vault_commands
-from brain.config import BrainPaths, ResearchPaths
+from brains import cli
+from brains.commands import health as health_commands
+from brains.commands import pdf as pdf_commands
+from brains.commands import research as research_commands
+from brains.commands import vault as vault_commands
+from brains.config import BrainsPaths, ResearchPaths
 
 
-def make_dummy_paths() -> BrainPaths:
+def make_dummy_paths() -> BrainsPaths:
     repo_root = Path("/tmp/repo")
-    brain_root = repo_root / ".brain"
-    index_root = brain_root / ".index" / "dummy"
-    return BrainPaths(
+    brains_root = repo_root / ".brains"
+    index_root = brains_root / ".index" / "dummy"
+    return BrainsPaths(
         repo_root=repo_root,
-        brain_root=brain_root,
+        brains_root=brains_root,
         pdf_dir=repo_root / "PDF",
         index_root=index_root,
         db_uri=index_root / "lancedb",
@@ -100,7 +100,7 @@ def test_search_command_text_output(monkeypatch) -> None:
                     "source_path": "PDF/paper.pdf",
                     "page_label": "2",
                     "chunk_index": 3,
-                    "snippet": "alphafold snippet",
+                    "snippet": "knowledge retrieval snippet",
                 }
             ],
             "warnings": ["fallback used"],
@@ -112,13 +112,13 @@ def test_search_command_text_output(monkeypatch) -> None:
     monkeypatch.setattr(pdf_commands, "search_pdfs", fake_search_pdfs)
 
     runner = CliRunner()
-    result = runner.invoke(cli.main, ["search", "alphafold", "--mode", "hybrid"])
+    result = runner.invoke(cli.main, ["search", "knowledge retrieval", "--mode", "hybrid"])
 
     assert result.exit_code == 0
     assert "Fallbacks:" in result.output
     assert "PDF/paper.pdf" in result.output
-    assert "alphafold snippet" in result.output
-    assert captured["config"].query == "alphafold"
+    assert "knowledge retrieval snippet" in result.output
+    assert captured["config"].query == "knowledge retrieval"
     assert captured["config"].mode == "hybrid"
 
 
@@ -134,7 +134,7 @@ def test_fetch_pdfs_command_json_output(monkeypatch) -> None:
         return {
             "downloaded_count": 1,
             "results": [],
-            "manifest_path": "/tmp/repo/.brain/.index/dummy/fetch_manifest.json",
+            "manifest_path": "/tmp/repo/.brains/.index/dummy/fetch_manifest.json",
         }
 
     def fake_index_pdfs(config):
@@ -216,7 +216,7 @@ def test_mcp_command_starts_server(monkeypatch) -> None:
         captured["kwargs"] = kwargs
         return DummyServer()
 
-    from brain.commands import mcp as mcp_commands
+    from brains.commands import mcp as mcp_commands
 
     monkeypatch.setattr(mcp_commands, "build_mcp_server", fake_build_mcp_server)
 
@@ -330,10 +330,10 @@ def test_think_command_json_output(monkeypatch) -> None:
 
     def fake_resolve_research_paths(**kwargs):
         captured["resolve_kwargs"] = kwargs
-        index_root = Path("/tmp/repo/.brain/.index/research")
+        index_root = Path("/tmp/repo/.brains/.index/research")
         return ResearchPaths(
             repo_root=Path("/tmp/repo"),
-            brain_root=Path("/tmp/repo/.brain"),
+            brains_root=Path("/tmp/repo/.brains"),
             index_root=index_root,
             memory_path=index_root / "memory.jsonl",
             sessions_dir=index_root / "sessions",
@@ -383,7 +383,7 @@ def test_search_vault_command_text_output(monkeypatch) -> None:
             "results": [
                 {
                     "rank": 1,
-                    "source_path": "UA/1. AlphaFold3/1.2. Архітектура/1.2.2. Pairformer.md",
+                    "source_path": "UA/Research/Architecture/Pairformer.md",
                     "language_branch": "UA",
                     "section": "Pairformer",
                     "chunk_index": 0,

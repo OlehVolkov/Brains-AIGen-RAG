@@ -7,13 +7,22 @@ rerank_model = "llama3.2:3b"
 cross_encoder_model = "cross-encoder/ms-marco-TinyBERT-L-6"
 
 [pdf]
+table_name = "scientific_pdf_chunks"
 pdf_dir = "PDF"
 index_root = ".brains/.index/pdf_search"
-table_name = "scientific_pdf_chunks"
+parser = "auto"
+grobid_url = "http://127.0.0.1:8070"
+marker_command = "marker_single"
+chunk_size = 1200
+chunk_overlap = 200
+batch_size = 32
 
 [vault]
-index_root = ".brains/.index/vault_search"
 table_name = "vault_markdown_chunks"
+index_root = ".brains/.index/vault_search"
+chunk_size = 1200
+chunk_overlap = 200
+batch_size = 32
 
 [research]
 index_root = ".brains/.index/research"

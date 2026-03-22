@@ -1,6 +1,6 @@
 # TODO
 
-Working backlog for aligning `/.brain` implementation with the repository-level `BRAIN.md` workflow.
+Working backlog for aligning `/.brains` implementation with the repository-level `BRAIN.md` workflow.
 
 ## Status Summary
 
@@ -87,7 +87,7 @@ Current gap:
 
 Needed:
 
-- add a reviewable note-update executor under `brain/research/` or `brain/sources/vault/`
+- add a reviewable note-update executor under `brains/research/` or `brains/sources/vault/`
 - support explicit write targets for:
   - creating a note
   - updating an existing note
@@ -154,7 +154,7 @@ Current gap:
 
 Needed:
 
-- add a reusable sanitization layer in `brain/shared/`
+- add a reusable sanitization layer in `brains/shared/`
 - scan derived text before writing:
   - research session JSON
   - memory rows
@@ -277,7 +277,7 @@ Needed:
 
 ## Acceptance Criteria
 
-`/.brain` can be considered aligned with `BRAIN.md` when it can:
+`/.brains` can be considered aligned with `BRAIN.md` when it can:
 
 - retrieve from vault and PDF indices
 - expose `Stage 1` retrieval as stable MCP-accessible vault search
@@ -286,5 +286,5 @@ Needed:
 - generate or update mirrored `EN/UA` notes
 - maintain `[[wiki-links]]` automatically
 - redact secrets / `PII` before saving artifacts
-- keep all generated metadata under `/.brain/.index`
+- keep all generated metadata under `/.brains/.index`
 - expose reviewable action artifacts instead of only free-text suggestions

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from brain.shared import normalize_text
-from brain.sources.pdf import (
+from brains.shared import normalize_text
+from brains.sources.pdf import (
     SearchConfig,
     _table_to_markdown,
     format_search_results,
     load_pdf_documents,
     search_pdfs,
 )
-from brain.config import resolve_pdf_paths
+from brains.config import resolve_pdf_paths
 
 
 def test_normalize_text_collapses_whitespace() -> None:
@@ -39,8 +39,8 @@ def test_load_pdf_documents_auto_falls_back_to_pdfplumber(monkeypatch, tmp_path:
             }
         ]
 
-    monkeypatch.setattr("brain.sources.pdf.parsers.load_pdf_with_pymupdf", fail_pymupdf)
-    monkeypatch.setattr("brain.sources.pdf.parsers.load_pdf_with_pdfplumber", ok_pdfplumber)
+    monkeypatch.setattr("brains.sources.pdf.parsers.load_pdf_with_pymupdf", fail_pymupdf)
+    monkeypatch.setattr("brains.sources.pdf.parsers.load_pdf_with_pdfplumber", ok_pdfplumber)
 
     docs, warnings = load_pdf_documents(
         pdf_path,
@@ -57,7 +57,7 @@ def test_load_pdf_documents_auto_falls_back_to_pdfplumber(monkeypatch, tmp_path:
 def test_search_pdfs_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_path: Path) -> None:
     paths = resolve_pdf_paths(pdf_dir=tmp_path / "PDF", index_root=tmp_path / "index")
 
-    monkeypatch.setattr("brain.sources.pdf.search.open_table", lambda paths_arg: object())
+    monkeypatch.setattr("brains.sources.pdf.search.open_table", lambda paths_arg: object())
 
     def fail_embed(*args, **kwargs):
         raise RuntimeError("ollama unavailable")
@@ -72,16 +72,16 @@ def test_search_pdfs_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_pat
             }
         ]
 
-    monkeypatch.setattr("brain.sources.pdf.search.embed_query_text", fail_embed)
+    monkeypatch.setattr("brains.sources.pdf.search.embed_query_text", fail_embed)
     monkeypatch.setattr(
-        "brain.sources.pdf.search.run_fts_search",
+        "brains.sources.pdf.search.run_fts_search",
         lambda table, **kwargs: fake_fts_search(**kwargs),
     )
 
     payload = search_pdfs(
         SearchConfig(
             paths=paths,
-            query="alphafold",
+            query="knowledge retrieval",
             mode="hybrid",
             reranker="none",
         )
@@ -95,9 +95,9 @@ def test_search_pdfs_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_pat
 def test_search_pdfs_falls_back_when_cross_encoder_fails(monkeypatch, tmp_path: Path) -> None:
     paths = resolve_pdf_paths(pdf_dir=tmp_path / "PDF", index_root=tmp_path / "index")
 
-    monkeypatch.setattr("brain.sources.pdf.search.open_table", lambda paths_arg: object())
+    monkeypatch.setattr("brains.sources.pdf.search.open_table", lambda paths_arg: object())
     monkeypatch.setattr(
-        "brain.sources.pdf.search.embed_query_text",
+        "brains.sources.pdf.search.embed_query_text",
         lambda *args, **kwargs: [0.1, 0.2],
     )
 
@@ -116,12 +116,12 @@ def test_search_pdfs_falls_back_when_cross_encoder_fails(monkeypatch, tmp_path: 
             }
         ]
 
-    monkeypatch.setattr("brain.sources.pdf.search.run_hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr("brains.sources.pdf.search.run_hybrid_search", fake_hybrid_search)
 
     payload = search_pdfs(
         SearchConfig(
             paths=paths,
-            query="alphafold",
+            query="knowledge retrieval",
             mode="hybrid",
             reranker="cross-encoder",
         )

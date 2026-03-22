@@ -3,17 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from brain.shared.health import check_index_health, resolve_active_index_paths
-from brain.config import BrainPaths
+from brains.shared.health import check_index_health, resolve_active_index_paths
+from brains.config import BrainsPaths
 
 
-def make_paths(tmp_path: Path) -> BrainPaths:
+def make_paths(tmp_path: Path) -> BrainsPaths:
     repo_root = tmp_path
-    brain_root = repo_root / ".brain"
-    index_root = brain_root / ".index" / "pdf_search"
-    return BrainPaths(
+    brains_root = repo_root / ".brains"
+    index_root = brains_root / ".index" / "pdf_search"
+    return BrainsPaths(
         repo_root=repo_root,
-        brain_root=brain_root,
+        brains_root=brains_root,
         pdf_dir=repo_root / "PDF",
         index_root=index_root,
         db_uri=index_root / "lancedb",

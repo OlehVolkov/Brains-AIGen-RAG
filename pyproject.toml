@@ -1,7 +1,7 @@
 [project]
-name = "brain"
+name = "brains"
 version = "0.1.0"
-description = "Local BRAIN tooling for the AlphaFold3 vault"
+description = "Local Brains tooling for knowledge bases, including Obsidian vaults"
 requires-python = ">=3.12"
 dependencies = [
     "lancedb>=0.30.0",
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-brain = "brain.cli:main"
+brains = "brains.cli:main"
 
 [dependency-groups]
 dev = [
@@ -46,7 +46,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["brain"]
+known-first-party = ["brains"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

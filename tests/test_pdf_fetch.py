@@ -4,10 +4,10 @@ import io
 import json
 from pathlib import Path
 
-from brain.sources.pdf import fetch as pdf_fetch
-from brain.sources.pdf.indexing import pointer_manifest_path, write_active_index_pointer
-from brain.sources.pdf.models import IndexConfig
-from brain.config import BrainPaths
+from brains.sources.pdf import fetch as pdf_fetch
+from brains.sources.pdf.indexing import pointer_manifest_path, write_active_index_pointer
+from brains.sources.pdf.models import IndexConfig
+from brains.config import BrainsPaths
 
 
 class FakeResponse(io.BytesIO):
@@ -26,13 +26,13 @@ class FakeResponse(io.BytesIO):
         self.close()
 
 
-def make_paths(tmp_path: Path) -> BrainPaths:
+def make_paths(tmp_path: Path) -> BrainsPaths:
     repo_root = tmp_path
-    brain_root = repo_root / ".brain"
-    index_root = brain_root / ".index" / "pdf_search"
-    return BrainPaths(
+    brains_root = repo_root / ".brains"
+    index_root = brains_root / ".index" / "pdf_search"
+    return BrainsPaths(
         repo_root=repo_root,
-        brain_root=brain_root,
+        brains_root=brains_root,
         pdf_dir=repo_root / "PDF",
         index_root=index_root,
         db_uri=index_root / "lancedb",
@@ -41,7 +41,7 @@ def make_paths(tmp_path: Path) -> BrainPaths:
     )
 
 
-def make_index_config(paths: BrainPaths) -> IndexConfig:
+def make_index_config(paths: BrainsPaths) -> IndexConfig:
     return IndexConfig(
         paths=paths,
         parser="auto",
@@ -241,9 +241,9 @@ def test_fetch_pdfs_from_notes_writes_manifest_and_supports_dry_run(
 def test_write_active_index_pointer_for_fallback_index(tmp_path: Path) -> None:
     paths = make_paths(tmp_path)
     fallback_root = tmp_path / "tmp-index"
-    fallback_paths = BrainPaths(
+    fallback_paths = BrainsPaths(
         repo_root=paths.repo_root,
-        brain_root=paths.brain_root,
+        brains_root=paths.brains_root,
         pdf_dir=paths.pdf_dir,
         index_root=fallback_root,
         db_uri=fallback_root / "lancedb",
@@ -260,7 +260,7 @@ def test_write_active_index_pointer_for_fallback_index(tmp_path: Path) -> None:
         },
     )
 
-    assert pointer_path == tmp_path / ".brain" / ".index" / "pdf_search" / "active_index.json"
+    assert pointer_path == tmp_path / ".brains" / ".index" / "pdf_search" / "active_index.json"
     payload = json.loads(pointer_path.read_text(encoding="utf-8"))
     assert payload["index_root"] == str(fallback_root)
     assert payload["db_uri"] == str(fallback_root / "lancedb")

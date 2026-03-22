@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from brain.config import resolve_vault_paths
-from brain.sources.vault import (
+from brains.config import resolve_vault_paths
+from brains.sources.vault import (
     VaultSearchConfig,
     format_vault_search_results,
     list_markdown_paths,
@@ -18,8 +18,8 @@ def test_list_markdown_paths_skips_tooling_and_pdf_dirs(tmp_path: Path) -> None:
     (tmp_path / "UA" / "Індекс.md").write_text("# Індекс\n", encoding="utf-8")
     (tmp_path / "EN").mkdir()
     (tmp_path / "EN" / "Index.md").write_text("# Index\n", encoding="utf-8")
-    (tmp_path / ".brain").mkdir()
-    (tmp_path / ".brain" / "README.md").write_text("# Hidden\n", encoding="utf-8")
+    (tmp_path / ".brains").mkdir()
+    (tmp_path / ".brains" / "README.md").write_text("# Hidden\n", encoding="utf-8")
     (tmp_path / "PDF").mkdir()
     (tmp_path / "PDF" / "paper.md").write_text("# Not for vault search\n", encoding="utf-8")
 
@@ -52,7 +52,7 @@ Details here.
 def test_search_vault_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_path: Path) -> None:
     paths = resolve_vault_paths(index_root=tmp_path / "index")
 
-    monkeypatch.setattr("brain.sources.vault.search.open_table", lambda paths_arg: object())
+    monkeypatch.setattr("brains.sources.vault.search.open_table", lambda paths_arg: object())
 
     def fail_embed(*args, **kwargs):
         raise RuntimeError("ollama unavailable")
@@ -61,16 +61,16 @@ def test_search_vault_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_pa
         return [
             {
                 "text": "knowledge snippet",
-                "source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+                "source_path": "EN/Research/Architecture/Pairformer.md",
                 "section": "Pairformer",
                 "language_branch": "EN",
                 "chunk_index": 0,
             }
         ]
 
-    monkeypatch.setattr("brain.sources.vault.search.embed_query_text", fail_embed)
+    monkeypatch.setattr("brains.sources.vault.search.embed_query_text", fail_embed)
     monkeypatch.setattr(
-        "brain.sources.vault.search.run_fts_search",
+        "brains.sources.vault.search.run_fts_search",
         lambda table, **kwargs: fake_fts_search(**kwargs),
     )
 
@@ -95,7 +95,7 @@ def test_format_vault_search_results_renders_sections_and_hits() -> None:
             "results": [
                 {
                     "rank": 1,
-                    "source_path": "UA/1. AlphaFold3/1.2. Архітектура/1.2.2. Pairformer.md",
+                    "source_path": "UA/Research/Architecture/Pairformer.md",
                     "language_branch": "UA",
                     "section": "Pairformer",
                     "chunk_index": 2,

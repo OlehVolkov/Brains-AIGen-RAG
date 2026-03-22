@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from brain.research import (
+from brains.research import (
     MemoryStore,
     ResearchRunConfig,
     format_think_report,
     rank_memories,
     run_think_loop,
 )
-from brain.config import ResearchPaths
+from brains.config import ResearchPaths
 
 
 def make_research_paths(tmp_path: Path) -> ResearchPaths:
-    index_root = tmp_path / ".brain" / ".index" / "research"
+    index_root = tmp_path / ".brains" / ".index" / "research"
     return ResearchPaths(
         repo_root=tmp_path,
-        brain_root=tmp_path / ".brain",
+        brains_root=tmp_path / ".brains",
         index_root=index_root,
         memory_path=index_root / "memory.jsonl",
         sessions_dir=index_root / "sessions",
@@ -51,21 +51,21 @@ def test_run_think_loop_falls_back_and_saves_memory(monkeypatch, tmp_path: Path)
     paths = make_research_paths(tmp_path)
 
     monkeypatch.setattr(
-        "brain.research.orchestration.search_vault_knowledge",
+        "brains.research.orchestration.search_vault_knowledge",
         lambda **kwargs: {
             "results": [{"source_path": "EN/Index.md", "snippet": "vault hit"}],
             "warnings": [],
         },
     )
     monkeypatch.setattr(
-        "brain.research.orchestration.search_pdf_corpus",
+        "brains.research.orchestration.search_pdf_corpus",
         lambda **kwargs: {
             "results": [{"source_path": "PDF/paper.pdf", "snippet": "pdf hit"}],
             "warnings": [],
         },
     )
     monkeypatch.setattr(
-        "brain.research.orchestration._call_ollama",
+        "brains.research.orchestration._call_ollama",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")),
     )
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from brain.mcp import (
+from brains.mcp import (
     create_mirror_note_tool,
     find_related_notes_tool,
     list_notes_tool,
@@ -17,18 +17,18 @@ from brain.mcp import (
     validate_note_tool,
     write_note_tool,
 )
-from brain.mcp.server import build_mcp_server
-from brain.sources.pdf.search import search_pdf_corpus
-from brain.sources.vault.related import find_related_note_candidates
-from brain.sources.vault.search import search_vault_knowledge
-from brain.config import ResearchPaths
+from brains.mcp.server import build_mcp_server
+from brains.sources.pdf.search import search_pdf_corpus
+from brains.sources.vault.related import find_related_note_candidates
+from brains.sources.vault.search import search_vault_knowledge
+from brains.config import ResearchPaths
 
 
 def _make_repo(tmp_path: Path) -> Path:
     repo_root = tmp_path / "repo"
     (repo_root / "EN" / "3. Models").mkdir(parents=True)
     (repo_root / "UA").mkdir(parents=True)
-    (repo_root / ".brain" / ".index" / "research").mkdir(parents=True)
+    (repo_root / ".brains" / ".index" / "research").mkdir(parents=True)
     (repo_root / "Home.md").write_text("# Home\n\nRoot page.\n", encoding="utf-8")
     (repo_root / "EN" / "3. Models" / "3.7. Boltz-1.md").write_text(
         "# Boltz-1\n\nOpen model note.\n",
@@ -108,10 +108,10 @@ def test_search_vault_knowledge_uses_existing_search_stack(monkeypatch) -> None:
         captured["config"] = config
         return {"results": [{"source_path": "EN/Index.md"}], "warnings": []}
 
-    monkeypatch.setattr("brain.sources.vault.search.resolve_vault_paths", fake_resolve_vault_paths)
-    monkeypatch.setattr("brain.sources.vault.search.search_vault", fake_search_vault)
+    monkeypatch.setattr("brains.sources.vault.search.resolve_vault_paths", fake_resolve_vault_paths)
+    monkeypatch.setattr("brains.sources.vault.search.search_vault", fake_search_vault)
     monkeypatch.setattr(
-        "brain.sources.vault.search.VaultSearchConfig.from_settings",
+        "brains.sources.vault.search.VaultSearchConfig.from_settings",
         classmethod(lambda cls, **kwargs: kwargs),
     )
 
@@ -124,7 +124,7 @@ def test_search_vault_knowledge_uses_existing_search_stack(monkeypatch) -> None:
 
 
 def test_search_vault_tool_delegates_to_rag_layer(monkeypatch) -> None:
-    monkeypatch.setattr("brain.mcp.tools.search.search_vault_knowledge", lambda **kwargs: {
+    monkeypatch.setattr("brains.mcp.tools.search.search_vault_knowledge", lambda **kwargs: {
         "results": [{"source_path": "EN/Index.md"}],
         "kwargs": kwargs,
     })
@@ -146,10 +146,10 @@ def test_search_pdf_corpus_uses_existing_search_stack(monkeypatch) -> None:
         captured["config"] = config
         return {"results": [{"source_path": "PDF/test.pdf"}], "warnings": []}
 
-    monkeypatch.setattr("brain.sources.pdf.search.resolve_pdf_paths", fake_resolve_pdf_paths)
-    monkeypatch.setattr("brain.sources.pdf.search.search_pdfs", fake_search_pdfs)
+    monkeypatch.setattr("brains.sources.pdf.search.resolve_pdf_paths", fake_resolve_pdf_paths)
+    monkeypatch.setattr("brains.sources.pdf.search.search_pdfs", fake_search_pdfs)
     monkeypatch.setattr(
-        "brain.sources.pdf.search.SearchConfig.from_settings",
+        "brains.sources.pdf.search.SearchConfig.from_settings",
         classmethod(lambda cls, **kwargs: kwargs),
     )
 
@@ -162,7 +162,7 @@ def test_search_pdf_corpus_uses_existing_search_stack(monkeypatch) -> None:
 
 
 def test_search_pdfs_tool_delegates_to_rag_layer(monkeypatch) -> None:
-    monkeypatch.setattr("brain.mcp.tools.search.search_pdf_corpus", lambda **kwargs: {
+    monkeypatch.setattr("brains.mcp.tools.search.search_pdf_corpus", lambda **kwargs: {
         "results": [{"source_path": "PDF/test.pdf"}],
         "kwargs": kwargs,
     })
@@ -175,7 +175,7 @@ def test_search_pdfs_tool_delegates_to_rag_layer(monkeypatch) -> None:
 
 def test_find_related_note_candidates_filters_same_branch_and_self(monkeypatch) -> None:
     monkeypatch.setattr(
-        "brain.sources.vault.related.search_vault_knowledge",
+        "brains.sources.vault.related.search_vault_knowledge",
         lambda **kwargs: {
             "results": [
                 {"source_path": "EN/3. Models/3.7. Boltz-1.md", "language_branch": "EN", "snippet": "self"},
@@ -200,7 +200,7 @@ def test_find_related_note_candidates_filters_same_branch_and_self(monkeypatch) 
 def test_find_related_notes_tool_delegates_to_rag_layer(monkeypatch, tmp_path: Path) -> None:
     repo_root = _make_repo(tmp_path)
 
-    monkeypatch.setattr("brain.mcp.tools.search.find_related_note_candidates", lambda **kwargs: {
+    monkeypatch.setattr("brains.mcp.tools.search.find_related_note_candidates", lambda **kwargs: {
         "results": [{"source_path": "EN/Index.md"}],
         "kwargs": kwargs,
     })
@@ -244,11 +244,11 @@ def test_validate_note_reports_missing_frontmatter_and_counterpart(tmp_path: Pat
 
 def test_run_experiment_writes_artifact(monkeypatch, tmp_path: Path) -> None:
     repo_root = _make_repo(tmp_path)
-    research_root = repo_root / ".brain" / ".index" / "research"
+    research_root = repo_root / ".brains" / ".index" / "research"
 
     dummy_paths = ResearchPaths(
         repo_root=repo_root,
-        brain_root=repo_root / ".brain",
+        brains_root=repo_root / ".brains",
         index_root=research_root,
         memory_path=research_root / "memory.jsonl",
         sessions_dir=research_root / "sessions",
@@ -262,10 +262,10 @@ def test_run_experiment_writes_artifact(monkeypatch, tmp_path: Path) -> None:
         }
 
     monkeypatch.setattr(
-        "brain.mcp.tools.experiments._resolve_research_paths_for_repo",
+        "brains.mcp.tools.experiments._resolve_research_paths_for_repo",
         lambda _: dummy_paths,
     )
-    monkeypatch.setattr("brain.mcp.tools.experiments.run_think_loop", fake_run_think_loop)
+    monkeypatch.setattr("brains.mcp.tools.experiments.run_think_loop", fake_run_think_loop)
 
     payload = run_experiment_tool(
         name="Boltz benchmark",
