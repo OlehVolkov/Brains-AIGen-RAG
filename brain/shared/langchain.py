@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+from typing import Any
 from typing import TYPE_CHECKING, Sequence
+from urllib import error, request
 
 from brain.shared.text import chunked, normalize_text
 
@@ -42,14 +45,51 @@ def embed_texts(
     base_url: str,
     batch_size: int,
 ) -> list[list[float]]:
-    from langchain_ollama import OllamaEmbeddings
-
-    embeddings = OllamaEmbeddings(
-        model=model,
-        base_url=base_url,
-        validate_model_on_init=False,
-    )
     vectors: list[list[float]] = []
     for batch in chunked(list(texts), batch_size):
-        vectors.extend(embeddings.embed_documents(list(batch)))
+        vectors.extend(
+            _embed_batch_with_fallback(
+                list(batch),
+                model=model,
+                base_url=base_url,
+            )
+        )
     return vectors
+
+
+def _post_json(url: str, payload: dict[str, Any], *, timeout: float = 30.0) -> dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with request.urlopen(req, timeout=timeout) as response:
+        raw = response.read().decode("utf-8")
+    return json.loads(raw)
+
+
+def _embed_batch_with_fallback(
+    texts: list[str],
+    *,
+    model: str,
+    base_url: str,
+) -> list[list[float]]:
+    primary_url = base_url.rstrip("/") + "/api/embed"
+    try:
+        response = _post_json(primary_url, {"model": model, "input": texts})
+        vectors = response.get("embeddings")
+        if not isinstance(vectors, list) or not vectors:
+            raise RuntimeError("Ollama /api/embed returned no embeddings.")
+        return [list(vector) for vector in vectors]
+    except (error.URLError, TimeoutError, OSError, ValueError, RuntimeError):
+        legacy_url = base_url.rstrip("/") + "/api/embeddings"
+        legacy_vectors: list[list[float]] = []
+        for text in texts:
+            response = _post_json(legacy_url, {"model": model, "prompt": text})
+            vector = response.get("embedding")
+            if not isinstance(vector, list) or not vector:
+                raise RuntimeError("Ollama /api/embeddings returned no embedding.")
+            legacy_vectors.append(list(vector))
+        return legacy_vectors
