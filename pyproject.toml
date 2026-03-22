@@ -1,0 +1,59 @@
+[project]
+name = "brain"
+version = "0.1.0"
+description = "Local BRAIN tooling for the AlphaFold3 vault"
+requires-python = ">=3.12"
+dependencies = [
+    "lancedb>=0.30.0",
+    "langchain-ollama>=1.0.1",
+    "langchain-text-splitters>=1.1.1",
+    "loguru>=0.7.3",
+    "mcp>=1.26.0",
+    "pdfplumber>=0.11.9",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "pymupdf>=1.27.2",
+    "rich>=14.1.0",
+    "sentence-transformers>=5.3.0",
+    "typer>=0.24.1",
+]
+
+[project.scripts]
+brain = "brain.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "pytest>=9.0.2",
+    "ruff>=0.13.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "E203",
+    "E501",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["brain"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

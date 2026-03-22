@@ -1,0 +1,20 @@
+# Generated index artifacts
+.index/*
+!.index/.gitkeep
+
+# Python environments and local overrides
+.venv/
+.venvx/
+.env
+.python-version
+config/local.toml
+
+# Test and Python caches
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
