@@ -110,6 +110,13 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python 
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains index-vault --parser auto"
 ```
 
+Canonical default for this repository:
+
+- use `index-vault --parser auto` for the main vault index
+- use `index-vault --parser docling` for parser comparison, rich-markdown debugging, or explicit docling validation runs
+- keep comparison roots under `/.brains/.index/...` such as `/.brains/.index/vault_search_auto` or `/.brains/.index/vault_search_docling`
+- do not leave repository-root `/.index` directories behind after experiments
+
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains search-vault \"pairformer\" --mode hybrid"
 ```
@@ -252,6 +259,21 @@ Run full test suite only when needed:
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest tests -q"
 ```
+
+For indexing, parsing, chunking, manifest, or retrieval changes, default verification is broader than unit tests:
+
+1. rebuild the affected index from scratch;
+2. run `brains check-index` on the rebuilt target;
+3. inspect `manifest.json`, parser counts, chunk counts, warnings, and pointer behavior;
+4. run representative retrieval probes on real notes or PDFs;
+5. compare the new behavior against the prior workflow before keeping the change.
+
+When evaluating retrieval quality, check for:
+
+- wrong note family in top hits,
+- frontmatter leakage such as `cssclasses` or `tags`,
+- code-block-heavy false positives,
+- poor section-path or snippet quality.
 
 ## WSL And Fallback Indexes
 

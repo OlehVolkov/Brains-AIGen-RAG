@@ -145,6 +145,9 @@ This repository uses local indexes for vault and PDF retrieval.
 - markdown index artifacts belong under `/.brains/.index/vault_search`
 - PDF index artifacts belong under `/.brains/.index/pdf_search`
 - research memory and sessions belong under `/.brains/.index/research`
+- prefer `brains index-vault --parser auto` for the canonical vault index
+- treat full `brains index-vault --parser docling` runs as verification/comparison runs unless the task explicitly needs a docling-only canonical index
+- keep experimental comparison roots under `/.brains/.index/...`; do not leave repository-root `/.index` directories behind
 
 If the active index uses a fallback location outside `/.brains/.index/...`, rely on the active pointer files rather than guessing paths manually.
 
@@ -152,6 +155,21 @@ Use the repository tooling to validate indexes:
 
 - `brains check-index --target vault`
 - `brains check-index --target pdf`
+
+When changing parsing, chunking, retrieval, ranking, manifests, or pointer behavior:
+
+1. rebuild the affected index from scratch;
+2. run `brains check-index` on the rebuilt target;
+3. inspect the generated `manifest.json` and debug output;
+4. run representative retrieval queries against real notes or PDFs;
+5. confirm that no unintended fallback pointer or stray index root remains.
+
+Judge retrieval quality by relevance, not only by successful execution:
+
+- confirm that the top hits point to the expected note or PDF family;
+- watch for frontmatter leakage such as `cssclasses` or `tags`;
+- watch for code-block-heavy false positives;
+- inspect whether section paths and snippets are useful for the query.
 
 If an index health check reports a timeout under sandboxed or WSL-mounted environments, do not assume corruption immediately. Re-run the validation in a less restricted environment first.
 

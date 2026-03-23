@@ -237,6 +237,36 @@ def test_extract_markdown_blocks_detects_figure_caption() -> None:
     assert [block.metadata["block_kind"] for block in blocks] == ["figure_caption"]
 
 
+def test_extract_markdown_blocks_handles_untyped_fenced_code_block() -> None:
+    blocks, _warnings = extract_markdown_blocks(
+        [
+            Document(
+                page_content=(
+                    "Methods\n\n"
+                    "```\n"
+                    "plain code block\n"
+                    "```\n"
+                ),
+                metadata={
+                    "source_path": "EN/Pairformer.md",
+                    "source_file": "Pairformer.md",
+                    "page": 0,
+                    "page_label": "md",
+                    "title": "Pairformer",
+                    "section": "Methods",
+                    "section_path": "Pairformer > Methods",
+                    "heading_level": 2,
+                    "language_branch": "EN",
+                    "parser": "native",
+                },
+            )
+        ]
+    )
+
+    assert [block.metadata["block_kind"] for block in blocks] == ["code_block"]
+    assert "plain code block" in blocks[0].page_content
+
+
 def test_search_vault_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_path: Path) -> None:
     paths = resolve_vault_paths(index_root=tmp_path / "index")
 

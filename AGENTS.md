@@ -66,6 +66,13 @@ Local instructions for agents working on the repository's `brains` tooling and i
 ## Retrieval Quality Rules
 
 - Optimize RAG around retrieval quality first: parser choice, chunking, metadata, candidate generation, reranking, and evaluation should be treated as a connected pipeline.
+- For canonical vault indexing, prefer `index-vault --parser auto`.
+- Treat `index-vault --parser docling` as a comparison or deep-debug mode unless the task explicitly requires a docling-only canonical vault index.
+- The intended repository-specific behavior of `--parser auto` is:
+  - route rich scientific markdown to `docling`,
+  - keep simpler notes on the native parser,
+  - reduce the runtime overhead of full-docling ingestion on every note.
+- Keep all experimental or comparison index roots under `/.brains/.index/...`; do not leave repository-root `/.index` directories behind.
 - Run a pre-clean step before chunking:
   - remove repeated PDF headers, footers, page numbers, and similar page furniture
   - remove markdown navigation-only lines and link-only related-note scaffolding when they do not add retrieval value
@@ -86,6 +93,17 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - raw retrieved candidates
   - threshold filtering
   - final context passed into generation
+- When changing parsing, chunking, indexing, manifests, or retrieval/ranking:
+  - rebuild the affected index from scratch,
+  - run `check-index`,
+  - inspect `manifest.json`, parser counts, block/chunk counts, warnings, and pointer behavior,
+  - run retrieval probes against real notes or PDFs instead of relying only on tests.
+- Retrieval evaluation must look beyond "the command succeeded":
+  - verify that top hits point to the right note or PDF family,
+  - watch for frontmatter leakage such as `cssclasses` or `tags`,
+  - watch for code-block-heavy false positives,
+  - inspect whether section paths and snippets remain useful for the query.
+- If a runtime finding changes the practical workflow, update the `/.brains` documentation in the same change when it fits.
 
 ## Project Rules
 

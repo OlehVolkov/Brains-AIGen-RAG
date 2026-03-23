@@ -275,7 +275,7 @@ def _parse_markdown_blocks(text: str) -> list[tuple[str, str]]:
 
 
 def _fenced_block_kind(info: str) -> str:
-    language = info.split(maxsplit=1)[0]
+    language = info.split(maxsplit=1)[0] if info.strip() else ""
     if language in _DIAGRAM_LANGS:
         return "diagram"
     if language in _FORMULA_LANGS:
