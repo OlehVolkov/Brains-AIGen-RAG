@@ -170,6 +170,9 @@ Judge retrieval quality by relevance, not only by successful execution:
 - watch for frontmatter leakage such as `cssclasses` or `tags`;
 - watch for code-block-heavy false positives;
 - inspect whether section paths and snippets are useful for the query.
+- prefer the active index manifest's `embed_model` for query embeddings unless a task explicitly overrides it; vault and PDF indexes may legitimately use different embedding models.
+- if Ollama embedding calls fail with transient `HTTP 500`-style errors during indexing, retry before treating the corpus or index as broken.
+- avoid assuming quoted phrase queries will work on every active FTS index; if phrase search is important, verify it explicitly for the current index first.
 
 If an index health check reports a timeout under sandboxed or WSL-mounted environments, do not assume corruption immediately. Re-run the validation in a less restricted environment first.
 

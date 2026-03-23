@@ -231,10 +231,14 @@ Use these defaults unless a task proves they are wrong:
 - preserve retrieval metadata such as source, section/page context, parser, and chunk diagnostics
 - for markdown notes with tables, formulas, or diagrams, prefer `index-vault --parser auto` or `index-vault --parser docling`
 - keep block-heavy markdown structures intact during chunking instead of splitting them with fixed character windows
+- if a single special block still exceeds `chunk_size`, split it deterministically instead of sending an oversized embedding payload
 - start with `--mode hybrid`
 - use `--mode auto` when queries mix exact lookups and semantic lookups in the same workflow
 - when using `--reranker rrf`, `--reranker cross-encoder`, or `--reranker ollama`, keep `--fetch-k` comfortably above final `--k`
 - use `--min-score` or `--max-distance` when weak tail results are worse than returning fewer hits
+- let search use the active index manifest's `embed_model` by default; do not assume vault and PDF indexes share the same embedding dimension
+- treat intermittent Ollama `/api/embed` failures as retryable before concluding that indexing is broken
+- avoid quoted phrase queries unless the active FTS index is known to support positions; plain-text semantic queries are the safer default
 - inspect `manifest.json` after reindexing to review chunk counts and chunk-size statistics before changing chunking defaults
 - treat retrieval changes as measurable: compare them on a small representative query set before keeping them
 

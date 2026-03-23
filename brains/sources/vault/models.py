@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import json
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from brains.config import BrainsPaths, get_config
+from brains.shared.health import resolve_active_index_paths
+
+
+def _resolve_search_embed_model(paths: BrainsPaths, explicit_model: str | None) -> str:
+    if explicit_model is not None:
+        return explicit_model
+    effective_paths, _pointer_path = resolve_active_index_paths(paths)
+    if effective_paths.manifest_path.exists():
+        payload = json.loads(effective_paths.manifest_path.read_text(encoding="utf-8"))
+        manifest_model = payload.get("embed_model")
+        if isinstance(manifest_model, str) and manifest_model:
+            return manifest_model
+    return get_config().ollama.embed_model
 
 
 class VaultIndexConfig(BaseModel):
@@ -88,7 +103,7 @@ class VaultSearchConfig(BaseModel):
             query=query,
             mode=mode,
             reranker=reranker,
-            embed_model=config.ollama.embed_model if embed_model is None else embed_model,
+            embed_model=_resolve_search_embed_model(paths, embed_model),
             ollama_base_url=config.ollama.base_url if ollama_base_url is None else ollama_base_url,
             cross_encoder_model=(
                 config.reranker.cross_encoder_model

@@ -173,6 +173,40 @@ def test_chunk_markdown_blocks_preserves_formula_and_table_context() -> None:
     assert "Pairformer | Pairformer > Methods" in chunked[0].page_content
 
 
+def test_chunk_markdown_blocks_splits_oversized_code_block() -> None:
+    code_lines = "\n".join(f"print({index})" for index in range(80))
+    blocks, _warnings = extract_markdown_blocks(
+        [
+            Document(
+                page_content=(
+                    "```python\n"
+                    f"{code_lines}\n"
+                    "```"
+                ),
+                metadata={
+                    "source_path": "EN/Pairformer.md",
+                    "source_file": "Pairformer.md",
+                    "page": 0,
+                    "page_label": "md",
+                    "title": "Pairformer",
+                    "section": "Implementation",
+                    "section_path": "Pairformer > Implementation",
+                    "heading_level": 2,
+                    "language_branch": "EN",
+                    "parser": "native",
+                },
+            )
+        ]
+    )
+
+    chunked = chunk_markdown_blocks(blocks, chunk_size=220, chunk_overlap=40)
+
+    assert len(chunked) > 1
+    assert all(doc.metadata["chunk_kind"] == "code_block" for doc in chunked)
+    assert all("Pairformer | Pairformer > Implementation" in doc.page_content for doc in chunked)
+    assert max(doc.metadata["char_count"] for doc in chunked) < 320
+
+
 def test_extract_markdown_blocks_excludes_references_and_marks_abstract() -> None:
     blocks, warnings = extract_markdown_blocks(
         [

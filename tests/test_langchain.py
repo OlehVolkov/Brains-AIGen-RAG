@@ -55,11 +55,54 @@ def test_embed_texts_falls_back_to_legacy_embeddings_endpoint(monkeypatch) -> No
             {"model": "nomic-embed-text", "input": ["alpha", "beta"]},
         ),
         (
+            "http://127.0.0.1:11434/api/embed",
+            {"model": "nomic-embed-text", "input": ["alpha", "beta"]},
+        ),
+        (
+            "http://127.0.0.1:11434/api/embed",
+            {"model": "nomic-embed-text", "input": ["alpha", "beta"]},
+        ),
+        (
             "http://127.0.0.1:11434/api/embeddings",
             {"model": "nomic-embed-text", "prompt": "alpha"},
         ),
         (
             "http://127.0.0.1:11434/api/embeddings",
             {"model": "nomic-embed-text", "prompt": "beta"},
+        ),
+    ]
+
+
+def test_embed_texts_retries_transient_primary_embed_failure(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+    attempts = {"count": 0}
+
+    def fake_post(url: str, payload: dict[str, object], *, timeout: float = 30.0):
+        calls.append((url, payload))
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise TimeoutError("temporary Ollama failure")
+        if url.endswith("/api/embed"):
+            return {"embeddings": [[0.1, 0.2]]}
+        raise AssertionError("legacy endpoint should not be used after a successful retry")
+
+    monkeypatch.setattr("brains.shared.langchain._post_json", fake_post)
+
+    vectors = embed_texts(
+        ["alpha"],
+        model="bge-m3:latest",
+        base_url="http://127.0.0.1:11434",
+        batch_size=1,
+    )
+
+    assert vectors == [[0.1, 0.2]]
+    assert calls == [
+        (
+            "http://127.0.0.1:11434/api/embed",
+            {"model": "bge-m3:latest", "input": ["alpha"]},
+        ),
+        (
+            "http://127.0.0.1:11434/api/embed",
+            {"model": "bge-m3:latest", "input": ["alpha"]},
         ),
     ]

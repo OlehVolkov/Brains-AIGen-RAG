@@ -77,6 +77,7 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - remove repeated PDF headers, footers, page numbers, and similar page furniture
   - remove markdown navigation-only lines and link-only related-note scaffolding when they do not add retrieval value
 - For markdown notes that contain formulas, tables, code fences, or diagrams, use block-aware chunking so those structures are not split across chunks unless there is no other practical option.
+- If a single table, code block, formula, or similarly special block grows beyond `chunk_size`, split it deterministically instead of sending an oversized embedding request downstream.
 - Prefer chunk-level indexing over whole-document retrieval; use sections, paragraphs, or similarly meaningful passages instead of large document blobs.
 - Keep chunk metadata rich and explicit. At minimum preserve stable source identity plus source-local context such as section, page, parser, language branch, and chunk-size diagnostics.
 - When reranking is enabled, retrieve a wider candidate pool first and rerank that pool before cutting down to final `k`.
@@ -103,6 +104,9 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - watch for frontmatter leakage such as `cssclasses` or `tags`,
   - watch for code-block-heavy false positives,
   - inspect whether section paths and snippets remain useful for the query.
+- Search commands should prefer the active index manifest's `embed_model` for query embedding unless the caller explicitly overrides the model. Do not assume one global embedding dimension across vault and PDF indexes.
+- Treat transient Ollama embedding failures such as intermittent `HTTP 500` on `/api/embed` as retryable runtime issues before treating the index build as structurally broken.
+- Phrase-style quoted queries may fail on FTS paths when the active LanceDB FTS index was not built with positional data. Prefer unquoted semantic queries unless phrase search is explicitly verified for the current index.
 - If a runtime finding changes the practical workflow, update the `/.brains` documentation in the same change when it fits.
 
 ## Project Rules

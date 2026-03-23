@@ -3,14 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from brains.config import (
+    BrainsPaths,
     load_config,
     resolve_pdf_paths,
     resolve_research_paths,
     resolve_vault_paths,
 )
-from brains.sources.pdf.models import IndexConfig
+from brains.sources.pdf.models import IndexConfig, SearchConfig
 from brains.research.models import ResearchRunConfig
-from brains.sources.vault.models import VaultIndexConfig
+from brains.sources.vault.models import VaultIndexConfig, VaultSearchConfig
 
 
 def test_load_config_merges_base_local_and_env(monkeypatch, tmp_path: Path) -> None:
@@ -111,3 +112,39 @@ def test_from_settings_preserves_explicit_zero_values() -> None:
     assert research_config.pdf_k == 0
     assert research_config.memory_k == 0
     assert research_config.reflection_rounds == 0
+
+
+def test_vault_search_config_uses_manifest_embed_model_when_present(tmp_path: Path) -> None:
+    paths = BrainsPaths(
+        repo_root=tmp_path,
+        brains_root=tmp_path / ".brains",
+        pdf_dir=tmp_path / "PDF",
+        index_root=tmp_path / ".brains" / ".index" / "vault_search",
+        db_uri=tmp_path / ".brains" / ".index" / "vault_search" / "lancedb",
+        manifest_path=tmp_path / ".brains" / ".index" / "vault_search" / "manifest.json",
+        table_name="vault_markdown_chunks",
+    )
+    paths.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.manifest_path.write_text('{"embed_model":"bge-m3:latest"}\n', encoding="utf-8")
+
+    config = VaultSearchConfig.from_settings(paths=paths, query="pairformer")
+
+    assert config.embed_model == "bge-m3:latest"
+
+
+def test_pdf_search_config_uses_manifest_embed_model_when_present(tmp_path: Path) -> None:
+    paths = BrainsPaths(
+        repo_root=tmp_path,
+        brains_root=tmp_path / ".brains",
+        pdf_dir=tmp_path / "PDF",
+        index_root=tmp_path / ".brains" / ".index" / "pdf_search",
+        db_uri=tmp_path / ".brains" / ".index" / "pdf_search" / "lancedb",
+        manifest_path=tmp_path / ".brains" / ".index" / "pdf_search" / "manifest.json",
+        table_name="scientific_pdf_chunks",
+    )
+    paths.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    paths.manifest_path.write_text('{"embed_model":"nomic-embed-text"}\n', encoding="utf-8")
+
+    config = SearchConfig.from_settings(paths=paths, query="pairformer")
+
+    assert config.embed_model == "nomic-embed-text"

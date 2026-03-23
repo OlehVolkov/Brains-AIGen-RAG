@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 from typing import TYPE_CHECKING, Sequence
 from urllib import error, request
@@ -71,6 +72,27 @@ def _post_json(url: str, payload: dict[str, Any], *, timeout: float = 30.0) -> d
     return json.loads(raw)
 
 
+def _post_json_with_retries(
+    url: str,
+    payload: dict[str, Any],
+    *,
+    timeout: float = 30.0,
+    attempts: int = 3,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _post_json(url, payload, timeout=timeout)
+        except (error.URLError, TimeoutError, OSError, ValueError) as exc:
+            last_error = exc
+            if attempt >= attempts:
+                raise
+            time.sleep(0.5 * attempt)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Embedding request failed without a captured exception.")
+
+
 def _embed_batch_with_fallback(
     texts: list[str],
     *,
@@ -79,7 +101,7 @@ def _embed_batch_with_fallback(
 ) -> list[list[float]]:
     primary_url = base_url.rstrip("/") + "/api/embed"
     try:
-        response = _post_json(primary_url, {"model": model, "input": texts})
+        response = _post_json_with_retries(primary_url, {"model": model, "input": texts})
         vectors = response.get("embeddings")
         if not isinstance(vectors, list) or not vectors:
             raise RuntimeError("Ollama /api/embed returned no embeddings.")
@@ -88,7 +110,7 @@ def _embed_batch_with_fallback(
         legacy_url = base_url.rstrip("/") + "/api/embeddings"
         legacy_vectors: list[list[float]] = []
         for text in texts:
-            response = _post_json(legacy_url, {"model": model, "prompt": text})
+            response = _post_json_with_retries(legacy_url, {"model": model, "prompt": text})
             vector = response.get("embedding")
             if not isinstance(vector, list) or not vector:
                 raise RuntimeError("Ollama /api/embeddings returned no embedding.")

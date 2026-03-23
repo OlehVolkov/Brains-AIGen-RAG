@@ -117,8 +117,18 @@ def chunk_markdown_blocks(
             if current_blocks and not _is_compatible_chunk(current_blocks[-1], document, chunk_size, current_chars):
                 flush_current(preserve_overlap=False)
             if payload_chars >= chunk_size and not current_blocks:
-                prepared.append(_make_chunk_document([document], chunk_index=chunk_index))
-                chunk_index += 1
+                if payload_chars > chunk_size:
+                    for split_doc in _split_large_block(
+                        document,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        start_chunk_index=chunk_index,
+                    ):
+                        prepared.append(split_doc)
+                        chunk_index += 1
+                else:
+                    prepared.append(_make_chunk_document([document], chunk_index=chunk_index))
+                    chunk_index += 1
                 continue
 
         if current_blocks and not _same_context(current_blocks[-1], document):
