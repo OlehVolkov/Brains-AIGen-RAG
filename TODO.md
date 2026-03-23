@@ -71,6 +71,17 @@ Missing or only partially implemented:
 - automatic `ACT` stage
 - automatic `LINK` stage
 - PDF-to-summary-to-note pipeline
+- staged scientific PDF ingestion:
+  - structure reconstruction
+  - reference exclusion
+  - citation/formula cleanup
+  - structure-aware chunking
+  - richer scholarly metadata
+- staged scientific vault markdown ingestion:
+  - parser routing (`native` vs `docling`)
+  - block-aware chunking for tables, formulas, diagrams, and images
+  - richer note metadata for explainability and filtering
+  - benchmark-driven decision on when `docling` should beat the native parser
 - mirrored `EN/UA` note creation and synchronization from research outputs
 - secrets / `PII` verification before saving derived artifacts
 - continuous automation loop
@@ -159,12 +170,62 @@ Needed:
   - research session JSON
   - memory rows
   - fetch manifests
-  - generated note drafts
+- generated note drafts
 - support mask / redact behavior and warning logs
+
+### 5. Build staged PDF ingestion for scientific retrieval quality
+
+Current gap:
+
+- PDF indexing still depends mainly on page-level parser output plus generic chunking.
+- Scientific-paper structure is only partially preserved, and references are not handled as a first-class exclusion stage.
+
+Needed:
+
+- Stage 2: structure reconstruction
+  - extract or infer:
+    - title
+    - abstract
+    - section hierarchy (`H1` / `H2` / `H3`)
+    - paragraphs
+    - figure captions
+    - tables
+    - references
+  - preserve `section_path` metadata instead of flattening everything into page text
+  - exclude `references` from indexed retrieval chunks
+- Stage 3: cleaning
+  - remove inline citation noise such as `[1]`
+  - remove author-year parenthetical citations when they are not semantically useful
+  - continue removing repeated header/footer boilerplate
+  - repair line-wrap artifacts
+  - normalize formulas into stable placeholders when full structural math extraction is unavailable
+- Stage 4: structure-aware chunking
+  - chunk by semantic blocks and section boundaries instead of only fixed-size recursive splitting
+  - keep tables and formulas intact
+  - include section/title context in chunk text or chunk metadata
+  - target roughly retrieval-friendly chunk sizes with controlled overlap
+- Stage 5: richer metadata
+  - add per-chunk fields such as:
+    - `title`
+    - `section`
+    - `section_path`
+    - `authors`
+    - `year`
+    - `source`
+    - `block_kind`
+    - `chunk_kind`
+  - use that metadata for filtering, reranking, and explainability
+
+Implementation notes:
+
+- prefer local `docling` or `marker` when better structure extraction is needed without a separate service
+- keep `grobid` optional only for users who explicitly want an external service
+- keep `pymupdf` / `pdfplumber` support through heuristic reconstruction, not by pretending they are fully structured parsers
+- keep staged artifacts reviewable through manifest counters and targeted tests
 
 ## Should Have
 
-### 5. Add grounded-claim verification after synthesis
+### 6. Add grounded-claim verification after synthesis
 
 Current gap:
 
@@ -176,7 +237,20 @@ Needed:
 - attach evidence references per claim where possible
 - fail closed or warn when unsupported synthesis exceeds a threshold
 
-### 6. Upgrade research memory beyond lexical token overlap
+### 7. Add retrieval score thresholds instead of fixed `top-k` only
+
+Current gap:
+
+- search paths always return `k` hits when available, even when lower-ranked hits are weak or only loosely related.
+
+Needed:
+
+- add configurable minimum score / similarity thresholds on retrieval results
+- support corpus-specific defaults for vault and PDF search
+- surface when results were trimmed by threshold instead of silently returning weak matches
+- keep `k` as an upper bound, not a guarantee of relevance
+
+### 8. Upgrade research memory beyond lexical token overlap
 
 Current gap:
 
@@ -189,7 +263,7 @@ Needed:
 - deduplication of near-identical sessions
 - better provenance tracking to source sessions and source notes
 
-### 7. Add planner/router logic for task-aware workflows
+### 9. Add planner/router logic for task-aware workflows
 
 Current gap:
 
@@ -204,12 +278,63 @@ Needed:
   - code generation
   - PDF ingestion follow-up
 - route each class to a different retrieval/action strategy
+- route retrieval itself based on query type:
+  - semantic concept lookup -> hybrid/vector search
+  - exact term or file/path lookup -> FTS / metadata-constrained retrieval
+  - fact extraction -> thresholded retrieval with stronger source traceability
 
 Target MCP tool alignment:
 
 - `run_experiment`
 
-### 8. Add reviewable note patch generation
+### 10. Add retrieval-quality evaluation and diagnostics
+
+Current gap:
+
+- retrieval changes are not measured on a stable set of representative queries.
+
+Needed:
+
+- create a small benchmark set of vault and PDF queries with expected relevant notes/chunks
+- compare retrieval settings before and after chunking, parser, model, and filtering changes
+- persist retrieval-debug artifacts under `/.brains/.index`:
+  - query
+  - effective mode
+  - thresholds
+  - retrieved candidates
+  - final selected chunks
+- keep retrieval debugging separate from generation debugging so failures are easier to isolate
+
+### 11. Add stronger preprocessing and boilerplate removal
+
+Current gap:
+
+- indexing normalizes text, but retrieval quality still depends on parser output that may include repeated headers, footers, navigation text, and low-value boilerplate.
+
+Needed:
+
+- remove repeated PDF page boilerplate before chunking
+- strip low-value markdown scaffolding when it does not help retrieval
+- preserve structural cues such as headings, section names, and table context
+- audit parser-specific cleanup rules instead of applying one generic cleanup path everywhere
+
+### 12. Add retrieval caching and source-traceability improvements
+
+Current gap:
+
+- repeated retrieval work is not cached, and final outputs can expose stronger provenance than they do today.
+
+Needed:
+
+- cache query embeddings and optionally repeated retrieval results for local research loops
+- include stable source references in final payloads:
+  - note path
+  - section
+  - page/page label
+  - parser context where relevant
+- expose why a chunk was selected when diagnostic mode is enabled
+
+### 13. Add reviewable note patch generation
 
 Current gap:
 
@@ -223,7 +348,7 @@ Needed:
 
 ## Nice To Have
 
-### 9. Add continuous / scheduled automation
+### 14. Add continuous / scheduled automation
 
 Current gap:
 
@@ -237,7 +362,7 @@ Needed:
   - stale-note detection
   - literature refresh
 
-### 10. Add coverage tracking for knowledge gaps
+### 15. Add coverage tracking for knowledge gaps
 
 Current gap:
 
@@ -249,7 +374,7 @@ Needed:
 - identify weakly covered domains
 - rank missing-note candidates
 
-### 11. Add experiment-idea structuring
+### 16. Add experiment-idea structuring
 
 Current gap:
 
@@ -267,13 +392,16 @@ Needed:
 ## Suggested Implementation Order
 
 1. Add sanitization and redaction hooks for all write paths.
-2. Add structured action plans to `think`.
-3. Add note patch generation and explicit target resolution.
-4. Add auto-linking and related-note updates.
-5. Add bilingual mirror generation for note creation/update.
-6. Add grounded-claim verification.
-7. Upgrade memory and task routing.
-8. Add optional scheduled automation.
+2. Build staged PDF ingestion with structure reconstruction, reference exclusion, and structure-aware chunking.
+3. Add structured action plans to `think`.
+4. Add note patch generation and explicit target resolution.
+5. Add auto-linking and related-note updates.
+6. Add bilingual mirror generation for note creation/update.
+7. Add retrieval score thresholds and stronger preprocessing.
+8. Add grounded-claim verification.
+9. Add retrieval benchmark coverage and diagnostics.
+10. Upgrade memory and task-aware routing.
+11. Add caching and optional scheduled automation.
 
 ## Acceptance Criteria
 

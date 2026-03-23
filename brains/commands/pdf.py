@@ -23,11 +23,13 @@ class ParserChoice(StrEnum):
     AUTO = "auto"
     PYMUPDF = "pymupdf"
     PDFPLUMBER = "pdfplumber"
+    DOCLING = "docling"
     GROBID = "grobid"
     MARKER = "marker"
 
 
 class SearchMode(StrEnum):
+    AUTO = "auto"
     VECTOR = "vector"
     FTS = "fts"
     HYBRID = "hybrid"
@@ -131,6 +133,14 @@ def register_pdf_commands(app: typer.Typer) -> None:
         ] = None,
         k: Annotated[int, typer.Option(help="Final number of hits.")] = 5,
         fetch_k: Annotated[int, typer.Option(help="Number of candidates fetched before reranking.")] = 20,
+        min_score: Annotated[
+            float | None,
+            typer.Option(help="Optional minimum score threshold for score-based results (0.0-1.0)."),
+        ] = None,
+        max_distance: Annotated[
+            float | None,
+            typer.Option(help="Optional maximum vector distance threshold for distance-based results."),
+        ] = None,
         snippet_chars: Annotated[int, typer.Option(help="Snippet length in characters.")] = 320,
         json_output: Annotated[bool, typer.Option(help="Emit JSON output.")] = False,
     ) -> None:
@@ -153,6 +163,8 @@ def register_pdf_commands(app: typer.Typer) -> None:
                 ollama_rerank_model=ollama_rerank_model,
                 k=k,
                 fetch_k=fetch_k,
+                min_score=min_score,
+                max_distance=max_distance,
                 snippet_chars=snippet_chars,
             )
         )

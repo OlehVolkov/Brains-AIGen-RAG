@@ -13,6 +13,7 @@ from brains.sources.vault.models import VaultIndexConfig, VaultSearchConfig
 
 
 class SearchMode(StrEnum):
+    AUTO = "auto"
     VECTOR = "vector"
     FTS = "fts"
     HYBRID = "hybrid"
@@ -23,6 +24,12 @@ class RerankerChoice(StrEnum):
     RRF = "rrf"
     CROSS_ENCODER = "cross-encoder"
     OLLAMA = "ollama"
+
+
+class VaultParserChoice(StrEnum):
+    NATIVE = "native"
+    DOCLING = "docling"
+    AUTO = "auto"
 
 
 def emit(payload: dict, *, json_output: bool, formatter) -> None:
@@ -40,6 +47,10 @@ def register_vault_commands(app: typer.Typer) -> None:
             typer.Option(help="Directory under /.brains/.index for search artifacts."),
         ] = None,
         table_name: Annotated[str | None, typer.Option(help="LanceDB table name.")] = None,
+        parser: Annotated[
+            VaultParserChoice,
+            typer.Option(help="Markdown parsing backend."),
+        ] = VaultParserChoice.NATIVE,
         embed_model: Annotated[str | None, typer.Option(help="Ollama embedding model name.")] = None,
         ollama_base_url: Annotated[str | None, typer.Option(help="Base URL for the local Ollama server.")] = None,
         chunk_size: Annotated[int | None, typer.Option(help="Chunk size in characters.")] = None,
@@ -62,6 +73,7 @@ def register_vault_commands(app: typer.Typer) -> None:
         summary = index_vault(
             VaultIndexConfig.from_settings(
                 paths=paths,
+                parser=parser.value,
                 embed_model=embed_model,
                 ollama_base_url=ollama_base_url,
                 chunk_size=chunk_size,
@@ -97,6 +109,14 @@ def register_vault_commands(app: typer.Typer) -> None:
         ] = None,
         k: Annotated[int, typer.Option(help="Final number of hits.")] = 5,
         fetch_k: Annotated[int, typer.Option(help="Number of candidates fetched before reranking.")] = 20,
+        min_score: Annotated[
+            float | None,
+            typer.Option(help="Optional minimum score threshold for score-based results (0.0-1.0)."),
+        ] = None,
+        max_distance: Annotated[
+            float | None,
+            typer.Option(help="Optional maximum vector distance threshold for distance-based results."),
+        ] = None,
         snippet_chars: Annotated[int, typer.Option(help="Snippet length in characters.")] = 320,
         json_output: Annotated[bool, typer.Option(help="Emit JSON output.")] = False,
     ) -> None:
@@ -118,6 +138,8 @@ def register_vault_commands(app: typer.Typer) -> None:
                 ollama_rerank_model=ollama_rerank_model,
                 k=k,
                 fetch_k=fetch_k,
+                min_score=min_score,
+                max_distance=max_distance,
                 snippet_chars=snippet_chars,
             )
         )

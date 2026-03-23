@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from brains.shared.preprocessing import clean_pdf_documents
 from brains.sources.pdf.backends import (
     _table_to_markdown,
+    load_pdf_with_docling,
     load_pdf_with_grobid,
     load_pdf_with_marker,
     load_pdf_with_pdfplumber,
@@ -12,7 +14,7 @@ from brains.sources.pdf.backends import (
 )
 
 
-PARSER_CHOICES = ["auto", "pymupdf", "pdfplumber", "grobid", "marker"]
+PARSER_CHOICES = ["auto", "pymupdf", "pdfplumber", "docling", "grobid", "marker"]
 __all__ = ["PARSER_CHOICES", "_table_to_markdown", "list_pdf_paths", "load_pdf_documents", "make_document"]
 
 
@@ -35,6 +37,7 @@ def load_pdf_documents(
         "auto": ["pymupdf", "pdfplumber"],
         "pymupdf": ["pymupdf"],
         "pdfplumber": ["pdfplumber"],
+        "docling": ["docling"],
         "grobid": ["grobid"],
         "marker": ["marker"],
     }
@@ -49,11 +52,15 @@ def load_pdf_documents(
                 documents = load_pdf_with_pymupdf(pdf_path, repo_root)
             elif parser_name == "pdfplumber":
                 documents = load_pdf_with_pdfplumber(pdf_path, repo_root)
+            elif parser_name == "docling":
+                documents = load_pdf_with_docling(pdf_path, repo_root)
             elif parser_name == "grobid":
                 documents = load_pdf_with_grobid(pdf_path, repo_root, grobid_url)
             else:
                 documents = load_pdf_with_marker(pdf_path, repo_root, marker_command)
             if documents:
+                documents, cleanup_warnings = clean_pdf_documents(documents)
+                warnings.extend(f"{rel_path}: {warning}" for warning in cleanup_warnings)
                 if parser == "auto" and parser_name != "pymupdf":
                     warnings.append(f"{rel_path}: auto parser fell back to {parser_name}.")
                 return documents, warnings

@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from brains.shared import logger
-from brains.shared.langchain import embed_texts, split_documents
+from brains.shared.langchain import embed_texts
 from brains.shared.text import chunk_id
+from brains.sources.pdf.chunking import chunk_pdf_blocks
 from brains.sources.pdf.models import IndexConfig
 from brains.sources.pdf.parsers import list_pdf_paths, load_pdf_documents
+from brains.sources.pdf.structured import extract_pdf_blocks
 from brains.config.loader import get_config, resolve_repo_path
 
 if TYPE_CHECKING:
@@ -40,8 +42,18 @@ def build_rows(
                 "page": page,
                 "page_label": str(doc.metadata.get("page_label", page)),
                 "parser": str(doc.metadata.get("parser", "unknown")),
+                "title": str(doc.metadata.get("title", "")),
+                "authors": ", ".join(str(author) for author in doc.metadata.get("authors", [])),
+                "year": int(doc.metadata["year"]) if doc.metadata.get("year") is not None else None,
+                "section": str(doc.metadata.get("section", "Document")),
+                "section_level": int(doc.metadata.get("section_level", 0)),
+                "section_path": str(doc.metadata.get("section_path", "Document")),
+                "block_kind": str(doc.metadata.get("block_kind", "paragraph")),
+                "chunk_kind": str(doc.metadata.get("chunk_kind", doc.metadata.get("block_kind", "paragraph"))),
+                "block_count": int(doc.metadata.get("block_count", 1)),
                 "chunk_index": chunk_index,
                 "char_count": int(doc.metadata["char_count"]),
+                "word_count": int(doc.metadata.get("word_count", 0)),
             }
         )
     return rows
@@ -50,9 +62,15 @@ def build_rows(
 def write_manifest(
     config: IndexConfig,
     pdf_paths: Sequence[Path],
-    chunk_count: int,
+    rows: Sequence[dict[str, Any]],
 ) -> dict[str, Any]:
     config.paths.index_root.mkdir(parents=True, exist_ok=True)
+    char_counts = [int(row["char_count"]) for row in rows]
+    word_counts = [int(row.get("word_count", 0)) for row in rows]
+    block_kind_counts: dict[str, int] = {}
+    for row in rows:
+        key = str(row.get("chunk_kind", row.get("block_kind", "paragraph")))
+        block_kind_counts[key] = block_kind_counts.get(key, 0) + 1
     manifest = {
         "created_at": datetime.now(UTC).isoformat(),
         "table_name": config.paths.table_name,
@@ -68,7 +86,16 @@ def write_manifest(
         "chunk_overlap": config.chunk_overlap,
         "batch_size": config.batch_size,
         "pdf_count": len(pdf_paths),
-        "chunk_count": chunk_count,
+        "chunk_count": len(rows),
+        "chunk_stats": {
+            "avg_char_count": round(sum(char_counts) / len(char_counts), 2),
+            "min_char_count": min(char_counts),
+            "max_char_count": max(char_counts),
+            "avg_word_count": round(sum(word_counts) / len(word_counts), 2),
+            "min_word_count": min(word_counts),
+            "max_word_count": max(word_counts),
+        },
+        "chunk_kind_counts": block_kind_counts,
         "pdf_files": [
             path.relative_to(config.paths.repo_root).as_posix()
             if path.is_relative_to(config.paths.repo_root)
@@ -125,7 +152,8 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
     if not pdf_paths:
         raise ValueError(f"No PDF files were found in {config.paths.pdf_dir}.")
 
-    source_docs: list[Document] = []
+    parsed_docs: list[Document] = []
+    structured_docs: list[Document] = []
     warnings: list[str] = []
     for pdf_path in pdf_paths:
         logger.debug("Loading PDF: {}", pdf_path)
@@ -137,10 +165,13 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
             marker_command=config.marker_command,
         )
         warnings.extend(parser_warnings)
-        source_docs.extend(docs)
+        parsed_docs.extend(docs)
+        block_docs, structure_warnings = extract_pdf_blocks(docs)
+        warnings.extend(f"{pdf_path.relative_to(config.paths.repo_root).as_posix()}: {warning}" for warning in structure_warnings)
+        structured_docs.extend(block_docs)
 
-    chunked_docs = split_documents(
-        source_docs,
+    chunked_docs = chunk_pdf_blocks(
+        structured_docs,
         chunk_size=config.chunk_size,
         chunk_overlap=config.chunk_overlap,
     )
@@ -163,7 +194,7 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
         mode="overwrite" if config.overwrite else "create",
     )
     table.create_fts_index("text", replace=True)
-    manifest = write_manifest(config, pdf_paths, len(rows))
+    manifest = write_manifest(config, pdf_paths, rows)
     active_index_pointer = write_active_index_pointer(config, manifest)
     logger.info(
         "Indexed {} PDFs into table {} with {} chunks.",
@@ -174,7 +205,8 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
     return {
         "table_name": config.paths.table_name,
         "pdf_count": len(pdf_paths),
-        "page_count": len(source_docs),
+        "page_count": len(parsed_docs),
+        "block_count": len(structured_docs),
         "chunk_count": len(rows),
         "manifest_path": str(config.paths.manifest_path),
         "db_uri": str(config.paths.db_uri),

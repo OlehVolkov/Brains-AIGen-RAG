@@ -32,6 +32,8 @@ class PdfConfig(BaseModel):
     chunk_size: int = 1200
     chunk_overlap: int = 200
     batch_size: int = 32
+    min_score: float | None = None
+    max_distance: float | None = None
 
 
 class VaultConfig(BaseModel):
@@ -39,9 +41,12 @@ class VaultConfig(BaseModel):
 
     table_name: str = "vault_markdown_chunks"
     index_root: str = ".brains/.index/vault_search"
+    parser: str = "native"
     chunk_size: int = 1200
     chunk_overlap: int = 200
     batch_size: int = 32
+    min_score: float | None = None
+    max_distance: float | None = None
 
 
 class ResearchConfig(BaseModel):

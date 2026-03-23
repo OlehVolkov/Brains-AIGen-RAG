@@ -18,12 +18,92 @@ def validate_search_config(config) -> None:
         raise ValueError("k must be greater than 0.")
     if config.fetch_k < config.k:
         raise ValueError("fetch_k must be greater than or equal to k.")
-    if config.mode not in {"vector", "fts", "hybrid"}:
-        raise ValueError("mode must be one of: vector, fts, hybrid.")
+    if config.mode not in {"auto", "vector", "fts", "hybrid"}:
+        raise ValueError("mode must be one of: auto, vector, fts, hybrid.")
     if config.reranker not in {"none", "rrf", "cross-encoder", "ollama"}:
         raise ValueError("reranker must be one of: none, rrf, cross-encoder, ollama.")
-    if config.mode != "hybrid" and config.reranker == "rrf":
+    if config.mode not in {"auto", "hybrid"} and config.reranker == "rrf":
         raise ValueError("rrf reranking is only supported for hybrid search.")
+    if config.min_score is not None and not 0.0 <= config.min_score <= 1.0:
+        raise ValueError("min_score must be between 0.0 and 1.0.")
+    if config.max_distance is not None and config.max_distance < 0.0:
+        raise ValueError("max_distance must be greater than or equal to 0.0.")
+
+
+def resolve_fetch_limit(*, k: int, fetch_k: int, reranker: str) -> int:
+    if reranker in {"rrf", "cross-encoder", "ollama"}:
+        return fetch_k
+    return k
+
+
+def resolve_query_mode(*, query: str, requested_mode: str) -> tuple[str, str | None]:
+    if requested_mode != "auto":
+        return requested_mode, None
+
+    normalized = query.strip()
+    if not normalized:
+        return "hybrid", "Auto mode chose hybrid retrieval for an empty query."
+
+    exact_patterns = (
+        r"\[\[[^\]]+\]\]",
+        r"\b[^\s/]+\.(?:md|pdf)\b",
+        r"(?:^|[\s(])(?:UA|EN)/[^\s]+",
+        r'"[^"]+"',
+        r"'[^']+'",
+        r"`[^`]+`",
+    )
+    if any(re.search(pattern, normalized) for pattern in exact_patterns):
+        return "fts", "Auto mode chose FTS for an exact-match or path-like query."
+
+    if re.search(r"\b[A-Z0-9_-]{4,}\b", normalized) and len(normalized.split()) <= 3:
+        return "fts", "Auto mode chose FTS for a short exact-term query."
+
+    return "hybrid", "Auto mode chose hybrid retrieval for a semantic lookup."
+
+
+def apply_result_thresholds(
+    rows: Sequence[dict[str, Any]],
+    *,
+    min_score: float | None,
+    max_distance: float | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    filtered: list[dict[str, Any]] = []
+    dropped_for_score = 0
+    dropped_for_distance = 0
+
+    for row in rows:
+        score = _coerce_float(row.get("_relevance_score"))
+        if score is None:
+            score = _coerce_float(row.get("_score"))
+        distance = _coerce_float(row.get("_distance"))
+
+        if min_score is not None and score is not None and score < min_score:
+            dropped_for_score += 1
+            continue
+        if max_distance is not None and distance is not None and distance > max_distance:
+            dropped_for_distance += 1
+            continue
+        filtered.append(dict(row))
+
+    warnings: list[str] = []
+    if dropped_for_score:
+        warnings.append(
+            f"Filtered {dropped_for_score} low-score hits below min_score={min_score:.3f}."
+        )
+    if dropped_for_distance:
+        warnings.append(
+            f"Filtered {dropped_for_distance} distant hits above max_distance={max_distance:.3f}."
+        )
+    return filtered, warnings
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def embed_query_text(

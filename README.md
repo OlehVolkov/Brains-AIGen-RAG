@@ -39,7 +39,7 @@ Current capabilities:
 - index markdown notes into a local LanceDB-based retrieval layer
 - search vault content with vector, FTS, or hybrid retrieval
 - index local PDFs with multiple parser backends
-- search PDF content with optional reranking
+- search PDF content with optional reranking over a wider candidate pool
 - run a local multi-step research loop through `think`
 - expose the stack over MCP
 - read, list, write, and experiment on notes through MCP tools
@@ -104,6 +104,10 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python 
 
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains index-vault"
+```
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains index-vault --parser auto"
 ```
 
 ```bash
@@ -204,9 +208,28 @@ Current default stack:
 - `Loguru` for logging
 - `PyMuPDF` as the default PDF parser
 - `pdfplumber` as a table-aware fallback
+- `Docling` as the preferred local no-service option when stronger PDF structure extraction is needed
+- native vault markdown parsing as the default for ordinary notes
+- `Docling` as an optional vault markdown parser for notes with dense scientific structure
 - `LangChain` for chunking
 - `LanceDB` for vector + FTS retrieval
 - `Ollama` for local embeddings and optional reranking
+
+## Retrieval Guidance
+
+Use these defaults unless a task proves they are wrong:
+
+- pre-clean source text before chunking: strip repeated PDF page furniture and markdown navigation-only scaffolding
+- index meaningful passages, not whole documents
+- preserve retrieval metadata such as source, section/page context, parser, and chunk diagnostics
+- for markdown notes with tables, formulas, or diagrams, prefer `index-vault --parser auto` or `index-vault --parser docling`
+- keep block-heavy markdown structures intact during chunking instead of splitting them with fixed character windows
+- start with `--mode hybrid`
+- use `--mode auto` when queries mix exact lookups and semantic lookups in the same workflow
+- when using `--reranker rrf`, `--reranker cross-encoder`, or `--reranker ollama`, keep `--fetch-k` comfortably above final `--k`
+- use `--min-score` or `--max-distance` when weak tail results are worse than returning fewer hits
+- inspect `manifest.json` after reindexing to review chunk counts and chunk-size statistics before changing chunking defaults
+- treat retrieval changes as measurable: compare them on a small representative query set before keeping them
 
 ## Verification
 

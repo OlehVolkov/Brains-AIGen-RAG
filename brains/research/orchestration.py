@@ -180,7 +180,7 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
     try:
         vault_payload = search_vault_knowledge(
             query=config.query,
-            mode="hybrid",
+            mode="auto",
             reranker="none",
             k=config.vault_k,
             fetch_k=max(config.vault_k, 10),
@@ -196,7 +196,7 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
     try:
         pdf_payload = search_pdf_corpus(
             query=config.query,
-            mode="hybrid",
+            mode="auto",
             reranker="none",
             k=config.pdf_k,
             fetch_k=max(config.pdf_k, 10),

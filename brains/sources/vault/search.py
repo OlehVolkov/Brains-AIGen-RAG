@@ -4,9 +4,12 @@ from typing import Any, Sequence
 
 from brains.shared import logger
 from brains.shared.retrieval import (
+    apply_result_thresholds,
     apply_ollama_rerank,
     embed_query_text,
     open_table,
+    resolve_fetch_limit,
+    resolve_query_mode,
     run_fts_search,
     run_hybrid_search,
     run_vector_search,
@@ -22,11 +25,17 @@ VAULT_SEARCH_COLUMNS = [
     "text",
     "source_path",
     "source_file",
+    "title",
     "section",
+    "section_path",
     "heading_level",
     "language_branch",
+    "parser",
     "chunk_index",
+    "chunk_kind",
+    "block_count",
     "char_count",
+    "word_count",
 ]
 
 
@@ -38,6 +47,8 @@ def search_vault_knowledge(
     k: int = 5,
     fetch_k: int = 20,
     snippet_chars: int = 320,
+    min_score: float | None = None,
+    max_distance: float | None = None,
     index_root: str | None = None,
 ) -> dict[str, Any]:
     paths = resolve_vault_paths(index_root=index_root)
@@ -50,6 +61,8 @@ def search_vault_knowledge(
             k=k,
             fetch_k=fetch_k,
             snippet_chars=snippet_chars,
+            min_score=min_score,
+            max_distance=max_distance,
         )
     )
 
@@ -57,13 +70,23 @@ def search_vault_knowledge(
 def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
     logger.info("Running vault search for query: {}", config.query)
     validate_search_config(config)
-    table = open_table(config.paths)
     warnings: list[str] = []
-    effective_reranker = (
-        "rrf" if config.mode == "hybrid" and config.reranker == "none" else config.reranker
+    effective_mode, route_reason = resolve_query_mode(
+        query=config.query,
+        requested_mode=config.mode,
     )
-    fetch_limit = config.fetch_k if effective_reranker == "ollama" else config.k
-    effective_mode = config.mode
+    if route_reason:
+        warnings.append(route_reason)
+    effective_reranker = (
+        "rrf" if effective_mode == "hybrid" and config.reranker == "none" else config.reranker
+    )
+    if effective_mode != "hybrid" and effective_reranker == "rrf":
+        effective_reranker = "none"
+        warnings.append(
+            "RRF reranking requires hybrid retrieval; falling back to base ranking."
+        )
+
+    table = open_table(config.paths)
     query_vector: list[float] | None = None
 
     if config.mode in {"vector", "hybrid"}:
@@ -85,6 +108,12 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
                 warnings.append(
                     "RRF reranking requires hybrid retrieval; falling back to plain FTS ranking."
                 )
+
+    fetch_limit = resolve_fetch_limit(
+        k=config.k,
+        fetch_k=config.fetch_k,
+        reranker=effective_reranker,
+    )
 
     try:
         if effective_mode == "vector":
@@ -125,6 +154,11 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
                 f"{fallback_reranker} ({type(exc).__name__}: {exc})."
             )
             effective_reranker = fallback_reranker
+            fetch_limit = resolve_fetch_limit(
+                k=config.k,
+                fetch_k=config.fetch_k,
+                reranker=effective_reranker,
+            )
             if effective_mode == "vector":
                 rows = run_vector_search(
                     table,
@@ -172,6 +206,13 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
                 "Ollama reranking unavailable; using base retrieval order "
                 f"({type(exc).__name__}: {exc})."
             )
+
+    rows, threshold_warnings = apply_result_thresholds(
+        rows,
+        min_score=config.min_score,
+        max_distance=config.max_distance,
+    )
+    warnings.extend(threshold_warnings)
 
     prepared: list[dict[str, Any]] = []
     for rank, row in enumerate(rows[: config.k], start=1):

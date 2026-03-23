@@ -67,6 +67,8 @@ class SearchConfig(BaseModel):
     k: int = 5
     fetch_k: int = 20
     snippet_chars: int = 320
+    min_score: float | None = Field(default_factory=lambda: get_config().pdf.min_score)
+    max_distance: float | None = Field(default_factory=lambda: get_config().pdf.max_distance)
 
     @classmethod
     def from_settings(
@@ -83,6 +85,8 @@ class SearchConfig(BaseModel):
         k: int = 5,
         fetch_k: int = 20,
         snippet_chars: int = 320,
+        min_score: float | None = None,
+        max_distance: float | None = None,
     ) -> "SearchConfig":
         config = get_config()
         return cls(
@@ -105,4 +109,6 @@ class SearchConfig(BaseModel):
             k=k,
             fetch_k=fetch_k,
             snippet_chars=snippet_chars,
+            min_score=config.pdf.min_score if min_score is None else min_score,
+            max_distance=config.pdf.max_distance if max_distance is None else max_distance,
         )

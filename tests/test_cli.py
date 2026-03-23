@@ -122,6 +122,45 @@ def test_search_command_text_output(monkeypatch) -> None:
     assert captured["config"].mode == "hybrid"
 
 
+def test_search_command_forwards_auto_mode_and_thresholds(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_paths(**kwargs):
+        return make_dummy_paths()
+
+    def fake_search_pdfs(config):
+        captured["config"] = config
+        return {
+            "results": [],
+            "warnings": [],
+            "effective_mode": "fts",
+            "effective_reranker": "none",
+        }
+
+    monkeypatch.setattr(pdf_commands, "resolve_pdf_paths", fake_resolve_paths)
+    monkeypatch.setattr(pdf_commands, "search_pdfs", fake_search_pdfs)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "search",
+            "GraphRAG.pdf",
+            "--mode",
+            "auto",
+            "--min-score",
+            "0.4",
+            "--max-distance",
+            "0.8",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["config"].mode == "auto"
+    assert captured["config"].min_score == 0.4
+    assert captured["config"].max_distance == 0.8
+
+
 def test_fetch_pdfs_command_json_output(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -203,6 +242,30 @@ def test_index_vault_command_json_output(monkeypatch) -> None:
         "index_root": None,
         "table_name": "vault_markdown_chunks",
     }
+
+
+def test_index_vault_command_forwards_parser(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_vault_paths(**kwargs):
+        return make_dummy_paths()
+
+    def fake_index_vault(config):
+        captured["config"] = config
+        return {
+            "status": "ok",
+            "table_name": "vault_markdown_chunks",
+            "active_index_pointer": None,
+        }
+
+    monkeypatch.setattr(vault_commands, "resolve_vault_paths", fake_resolve_vault_paths)
+    monkeypatch.setattr(vault_commands, "index_vault", fake_index_vault)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["index-vault", "--parser", "auto"])
+
+    assert result.exit_code == 0
+    assert captured["config"].parser == "auto"
 
 
 def test_mcp_command_starts_server(monkeypatch) -> None:
@@ -406,3 +469,42 @@ def test_search_vault_command_text_output(monkeypatch) -> None:
     assert "Pairformer.md" in result.output
     assert "pairformer snippet" in result.output
     assert captured["config"].query == "pairformer"
+
+
+def test_search_vault_command_forwards_auto_mode_and_thresholds(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_vault_paths(**kwargs):
+        return make_dummy_paths()
+
+    def fake_search_vault(config):
+        captured["config"] = config
+        return {
+            "results": [],
+            "warnings": [],
+            "effective_mode": "fts",
+            "effective_reranker": "none",
+        }
+
+    monkeypatch.setattr(vault_commands, "resolve_vault_paths", fake_resolve_vault_paths)
+    monkeypatch.setattr(vault_commands, "search_vault", fake_search_vault)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "search-vault",
+            "EN/Research/Architecture/Pairformer.md",
+            "--mode",
+            "auto",
+            "--min-score",
+            "0.6",
+            "--max-distance",
+            "0.7",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["config"].mode == "auto"
+    assert captured["config"].min_score == 0.6
+    assert captured["config"].max_distance == 0.7

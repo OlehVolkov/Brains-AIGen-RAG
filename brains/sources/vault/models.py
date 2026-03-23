@@ -9,6 +9,7 @@ class VaultIndexConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     paths: BrainsPaths
+    parser: str = Field(default_factory=lambda: get_config().vault.parser)
     embed_model: str = Field(default_factory=lambda: get_config().ollama.embed_model)
     ollama_base_url: str = Field(default_factory=lambda: get_config().ollama.base_url)
     chunk_size: int = Field(default_factory=lambda: get_config().vault.chunk_size)
@@ -21,6 +22,7 @@ class VaultIndexConfig(BaseModel):
         cls,
         *,
         paths: BrainsPaths,
+        parser: str | None = None,
         embed_model: str | None = None,
         ollama_base_url: str | None = None,
         chunk_size: int | None = None,
@@ -31,6 +33,7 @@ class VaultIndexConfig(BaseModel):
         config = get_config()
         return cls(
             paths=paths,
+            parser=config.vault.parser if parser is None else parser,
             embed_model=config.ollama.embed_model if embed_model is None else embed_model,
             ollama_base_url=config.ollama.base_url if ollama_base_url is None else ollama_base_url,
             chunk_size=config.vault.chunk_size if chunk_size is None else chunk_size,
@@ -58,6 +61,8 @@ class VaultSearchConfig(BaseModel):
     k: int = 5
     fetch_k: int = 20
     snippet_chars: int = 320
+    min_score: float | None = Field(default_factory=lambda: get_config().vault.min_score)
+    max_distance: float | None = Field(default_factory=lambda: get_config().vault.max_distance)
 
     @classmethod
     def from_settings(
@@ -74,6 +79,8 @@ class VaultSearchConfig(BaseModel):
         k: int = 5,
         fetch_k: int = 20,
         snippet_chars: int = 320,
+        min_score: float | None = None,
+        max_distance: float | None = None,
     ) -> "VaultSearchConfig":
         config = get_config()
         return cls(
@@ -96,4 +103,6 @@ class VaultSearchConfig(BaseModel):
             k=k,
             fetch_k=fetch_k,
             snippet_chars=snippet_chars,
+            min_score=config.vault.min_score if min_score is None else min_score,
+            max_distance=config.vault.max_distance if max_distance is None else max_distance,
         )

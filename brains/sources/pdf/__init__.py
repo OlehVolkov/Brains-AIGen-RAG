@@ -19,17 +19,20 @@ from brains.sources.pdf.indexing import (
     write_manifest,
 )
 from brains.sources.pdf.models import IndexConfig, SearchConfig
+from brains.sources.pdf.chunking import chunk_pdf_blocks
 from brains.sources.pdf.parsers import (
     PARSER_CHOICES,
     _table_to_markdown,
     list_pdf_paths,
     load_pdf_documents,
+    load_pdf_with_docling,
     load_pdf_with_grobid,
     load_pdf_with_marker,
     load_pdf_with_pdfplumber,
     load_pdf_with_pymupdf,
     make_document,
 )
+from brains.sources.pdf.structured import extract_pdf_blocks
 from brains.sources.pdf.search import SEARCH_COLUMNS, format_search_results, search_pdf_corpus, search_pdfs
 
 __all__ = [
@@ -41,7 +44,9 @@ __all__ = [
     "_table_to_markdown",
     "build_rows",
     "candidate_pdf_urls",
+    "chunk_pdf_blocks",
     "extract_http_urls",
+    "extract_pdf_blocks",
     "fetch_manifest_path",
     "fetch_pdf_url",
     "fetch_pdfs_from_notes",
@@ -52,6 +57,7 @@ __all__ = [
     "list_pdf_paths",
     "list_source_note_paths",
     "load_pdf_documents",
+    "load_pdf_with_docling",
     "load_pdf_with_grobid",
     "load_pdf_with_marker",
     "load_pdf_with_pdfplumber",

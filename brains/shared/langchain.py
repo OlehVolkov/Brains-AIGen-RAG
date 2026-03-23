@@ -34,6 +34,7 @@ def split_documents(
         metadata = dict(doc.metadata)
         metadata["chunk_index"] = index
         metadata["char_count"] = len(text)
+        metadata["word_count"] = len(text.split())
         prepared.append(Document(page_content=text, metadata=metadata))
     return prepared
 

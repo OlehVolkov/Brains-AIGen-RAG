@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Local Brains tooling for knowledge bases, including Obsidian vaults"
 requires-python = ">=3.12"
 dependencies = [
+    "docling>=2.81.0",
     "lancedb>=0.30.0",
     "langchain-ollama>=1.0.1",
     "langchain-text-splitters>=1.1.1",

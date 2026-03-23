@@ -12,10 +12,12 @@ from brains.sources.vault.search import search_vault_knowledge
 def search_vault_tool(
     *,
     query: str,
-    mode: Literal["vector", "fts", "hybrid"] = "hybrid",
+    mode: Literal["auto", "vector", "fts", "hybrid"] = "hybrid",
     reranker: Literal["none", "rrf", "cross-encoder", "ollama"] = "none",
     k: int = 5,
     fetch_k: int = 20,
+    min_score: float | None = None,
+    max_distance: float | None = None,
     snippet_chars: int = 320,
     index_root: str | None = None,
 ) -> dict[str, Any]:
@@ -25,6 +27,8 @@ def search_vault_tool(
         reranker=reranker,
         k=k,
         fetch_k=fetch_k,
+        min_score=min_score,
+        max_distance=max_distance,
         snippet_chars=snippet_chars,
         index_root=index_root,
     )
@@ -33,10 +37,12 @@ def search_vault_tool(
 def search_pdfs_tool(
     *,
     query: str,
-    mode: Literal["vector", "fts", "hybrid"] = "hybrid",
+    mode: Literal["auto", "vector", "fts", "hybrid"] = "hybrid",
     reranker: Literal["none", "rrf", "cross-encoder", "ollama"] = "none",
     k: int = 5,
     fetch_k: int = 20,
+    min_score: float | None = None,
+    max_distance: float | None = None,
     snippet_chars: int = 320,
     index_root: str | None = None,
 ) -> dict[str, Any]:
@@ -46,6 +52,8 @@ def search_pdfs_tool(
         reranker=reranker,
         k=k,
         fetch_k=fetch_k,
+        min_score=min_score,
+        max_distance=max_distance,
         snippet_chars=snippet_chars,
         index_root=index_root,
     )

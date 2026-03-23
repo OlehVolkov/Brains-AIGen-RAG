@@ -18,7 +18,7 @@ from brains.config.loader import repo_root
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 ListNotesBranch = Literal["EN", "UA", "root", "all"]
-SearchMode = Literal["vector", "fts", "hybrid"]
+SearchMode = Literal["auto", "vector", "fts", "hybrid"]
 Reranker = Literal["none", "rrf", "cross-encoder", "ollama"]
 RelatedBranch = Literal["same", "all"]
 WriteMode = Literal["overwrite", "append", "prepend"]
@@ -79,6 +79,8 @@ def build_mcp_server(
         reranker: Reranker = "none",
         k: int = 5,
         fetch_k: int = 20,
+        min_score: float | None = None,
+        max_distance: float | None = None,
         snippet_chars: int = 320,
         index_root: str | None = None,
     ) -> dict[str, object]:
@@ -88,6 +90,8 @@ def build_mcp_server(
             reranker=reranker,
             k=k,
             fetch_k=fetch_k,
+            min_score=min_score,
+            max_distance=max_distance,
             snippet_chars=snippet_chars,
             index_root=index_root,
         )
@@ -102,6 +106,8 @@ def build_mcp_server(
         reranker: Reranker = "none",
         k: int = 5,
         fetch_k: int = 20,
+        min_score: float | None = None,
+        max_distance: float | None = None,
         snippet_chars: int = 320,
         index_root: str | None = None,
     ) -> dict[str, object]:
@@ -111,6 +117,8 @@ def build_mcp_server(
             reranker=reranker,
             k=k,
             fetch_k=fetch_k,
+            min_score=min_score,
+            max_distance=max_distance,
             snippet_chars=snippet_chars,
             index_root=index_root,
         )

@@ -57,6 +57,35 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - better scientific-paper structure extraction (`Grobid`, `Docling`),
   - stronger scientific embedding models (`SPECTER2`, `SciBERT`),
   - or a different storage backend for scale / deployment constraints.
+- When better scientific-paper structure extraction is needed without a separate service, prefer local `Docling` over `Grobid`.
+- For markdown notes, keep the native vault parser as the default, but allow `Docling` when notes contain dense scientific structure such as tables, formulas, diagrams, or image-heavy sections.
+- For vault markdown ingestion, prefer parser routing over one-size-fits-all parsing:
+  - ordinary Obsidian notes -> native markdown parser
+  - rich scientific notes with tables / formulas / diagrams -> `Docling` or `auto`
+
+## Retrieval Quality Rules
+
+- Optimize RAG around retrieval quality first: parser choice, chunking, metadata, candidate generation, reranking, and evaluation should be treated as a connected pipeline.
+- Run a pre-clean step before chunking:
+  - remove repeated PDF headers, footers, page numbers, and similar page furniture
+  - remove markdown navigation-only lines and link-only related-note scaffolding when they do not add retrieval value
+- For markdown notes that contain formulas, tables, code fences, or diagrams, use block-aware chunking so those structures are not split across chunks unless there is no other practical option.
+- Prefer chunk-level indexing over whole-document retrieval; use sections, paragraphs, or similarly meaningful passages instead of large document blobs.
+- Keep chunk metadata rich and explicit. At minimum preserve stable source identity plus source-local context such as section, page, parser, language branch, and chunk-size diagnostics.
+- When reranking is enabled, retrieve a wider candidate pool first and rerank that pool before cutting down to final `k`.
+- Prefer hybrid retrieval as the default for broad knowledge search, then test vector-only or FTS-only only when corpus behavior justifies it.
+- Use query-aware retrieval routing when the query shape is a strong signal:
+  - exact path, quoted phrase, note title, or file-like lookup -> prefer `fts` or metadata-constrained retrieval
+  - broad conceptual lookup -> prefer `hybrid`
+- Do not treat `top-k` as a relevance guarantee. Prefer trimming weak hits with explicit score or distance thresholds when the backend returns usable ranking signals.
+- Treat chunk-size tuning as empirical work. Adjust `chunk_size` and `chunk_overlap` against real queries and inspect manifest statistics instead of assuming one default fits every corpus.
+- Any change that claims retrieval improvement should be evaluated on a small representative query set and compared against the prior behavior.
+- Put retrieval diagnostics in generated artifacts and manifests under `/.brains/.index`; do not spill them into notes or governance files.
+- Retrieval debugging should separate:
+  - query routing decisions
+  - raw retrieved candidates
+  - threshold filtering
+  - final context passed into generation
 
 ## Project Rules
 

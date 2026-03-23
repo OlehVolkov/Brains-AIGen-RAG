@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from collections import Counter
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from brains.shared import logger
-from brains.shared.langchain import embed_texts, split_documents
+from brains.shared.langchain import embed_texts
 from brains.shared.text import chunk_id
 from brains.config.loader import get_config, resolve_repo_path
-from brains.sources.vault.markdown import list_markdown_paths, load_markdown_documents
+from brains.sources.vault.chunking import chunk_markdown_blocks, extract_markdown_blocks
+from brains.sources.vault.markdown import list_markdown_paths
 from brains.sources.vault.models import VaultIndexConfig
+from brains.sources.vault.parsers import parse_markdown_documents
 
 if TYPE_CHECKING:
     from langchain_core.documents import Document
@@ -36,11 +39,17 @@ def build_vault_rows(
                 "text": doc.page_content,
                 "source_path": source_path,
                 "source_file": str(doc.metadata["source_file"]),
+                "title": str(doc.metadata.get("title", "")),
                 "section": str(doc.metadata.get("section", "Document")),
+                "section_path": str(doc.metadata.get("section_path", "Document")),
                 "heading_level": int(doc.metadata.get("heading_level", 0)),
                 "language_branch": str(doc.metadata.get("language_branch", "root")),
+                "parser": str(doc.metadata.get("parser", "native")),
                 "chunk_index": chunk_index,
+                "chunk_kind": str(doc.metadata.get("chunk_kind", "paragraph")),
+                "block_count": int(doc.metadata.get("block_count", 1)),
                 "char_count": int(doc.metadata["char_count"]),
+                "word_count": int(doc.metadata.get("word_count", 0)),
             }
         )
     return rows
@@ -49,9 +58,16 @@ def build_vault_rows(
 def write_manifest(
     config: VaultIndexConfig,
     markdown_paths: Sequence[Path],
-    chunk_count: int,
+    *,
+    parser_counts: Counter[str],
+    block_count: int,
+    rows: Sequence[dict[str, Any]],
+    warnings: Sequence[str],
 ) -> dict[str, Any]:
     config.paths.index_root.mkdir(parents=True, exist_ok=True)
+    char_counts = [int(row["char_count"]) for row in rows]
+    word_counts = [int(row.get("word_count", 0)) for row in rows]
+    chunk_kind_counts = Counter(str(row.get("chunk_kind", "paragraph")) for row in rows)
     manifest = {
         "created_at": datetime.now(UTC).isoformat(),
         "table_name": config.paths.table_name,
@@ -60,17 +76,30 @@ def write_manifest(
         else str(config.paths.db_uri),
         "embed_model": config.embed_model,
         "ollama_base_url": config.ollama_base_url,
+        "parser": config.parser,
         "chunk_size": config.chunk_size,
         "chunk_overlap": config.chunk_overlap,
         "batch_size": config.batch_size,
         "markdown_count": len(markdown_paths),
-        "chunk_count": chunk_count,
+        "block_count": block_count,
+        "chunk_count": len(rows),
+        "parser_counts": dict(sorted(parser_counts.items())),
+        "chunk_kind_counts": dict(sorted(chunk_kind_counts.items())),
+        "chunk_stats": {
+            "avg_char_count": round(sum(char_counts) / len(char_counts), 2),
+            "min_char_count": min(char_counts),
+            "max_char_count": max(char_counts),
+            "avg_word_count": round(sum(word_counts) / len(word_counts), 2),
+            "min_word_count": min(word_counts),
+            "max_word_count": max(word_counts),
+        },
         "markdown_files": [
             path.relative_to(config.paths.repo_root).as_posix()
             if path.is_relative_to(config.paths.repo_root)
             else str(path)
             for path in markdown_paths
         ],
+        "warnings": list(warnings),
     }
     config.paths.manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
@@ -122,11 +151,23 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
         raise ValueError("No markdown files were found for vault indexing.")
 
     source_docs: list[Document] = []
+    warnings: list[str] = []
+    parser_counts: Counter[str] = Counter()
     for markdown_path in markdown_paths:
-        source_docs.extend(load_markdown_documents(markdown_path, config.paths.repo_root))
+        parse_result = parse_markdown_documents(
+            markdown_path,
+            config.paths.repo_root,
+            parser=config.parser,
+        )
+        source_docs.extend(parse_result.documents)
+        parser_counts[parse_result.parser] += 1
+        warnings.extend(parse_result.warnings)
 
-    chunked_docs = split_documents(
-        source_docs,
+    block_docs, block_warnings = extract_markdown_blocks(source_docs)
+    warnings.extend(block_warnings)
+
+    chunked_docs = chunk_markdown_blocks(
+        block_docs,
         chunk_size=config.chunk_size,
         chunk_overlap=config.chunk_overlap,
     )
@@ -149,7 +190,14 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
         mode="overwrite" if config.overwrite else "create",
     )
     table.create_fts_index("text", replace=True)
-    manifest = write_manifest(config, markdown_paths, len(rows))
+    manifest = write_manifest(
+        config,
+        markdown_paths,
+        parser_counts=parser_counts,
+        block_count=len(block_docs),
+        rows=rows,
+        warnings=warnings,
+    )
     active_index_pointer = write_active_index_pointer(config, manifest)
     logger.info(
         "Indexed {} markdown files into table {} with {} chunks.",
@@ -161,10 +209,14 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
         "table_name": config.paths.table_name,
         "markdown_count": len(markdown_paths),
         "section_count": len(source_docs),
+        "block_count": len(block_docs),
         "chunk_count": len(rows),
         "manifest_path": str(config.paths.manifest_path),
         "db_uri": str(config.paths.db_uri),
         "embed_model": config.embed_model,
+        "parser": config.parser,
+        "parser_counts": dict(sorted(parser_counts.items())),
+        "warnings": warnings,
         "manifest": manifest,
         "active_index_pointer": str(active_index_pointer) if active_index_pointer else None,
     }
