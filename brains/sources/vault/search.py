@@ -31,6 +31,7 @@ VAULT_SEARCH_COLUMNS = [
     "heading_level",
     "language_branch",
     "parser",
+    "block_kind",
     "chunk_index",
     "chunk_kind",
     "block_count",

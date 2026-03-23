@@ -45,6 +45,7 @@ def build_vault_rows(
                 "heading_level": int(doc.metadata.get("heading_level", 0)),
                 "language_branch": str(doc.metadata.get("language_branch", "root")),
                 "parser": str(doc.metadata.get("parser", "native")),
+                "block_kind": str(doc.metadata.get("block_kind", "paragraph")),
                 "chunk_index": chunk_index,
                 "chunk_kind": str(doc.metadata.get("chunk_kind", "paragraph")),
                 "block_count": int(doc.metadata.get("block_count", 1)),
@@ -61,6 +62,7 @@ def write_manifest(
     *,
     parser_counts: Counter[str],
     block_count: int,
+    block_kind_counts: Counter[str],
     rows: Sequence[dict[str, Any]],
     warnings: Sequence[str],
 ) -> dict[str, Any]:
@@ -84,6 +86,7 @@ def write_manifest(
         "block_count": block_count,
         "chunk_count": len(rows),
         "parser_counts": dict(sorted(parser_counts.items())),
+        "block_kind_counts": dict(sorted(block_kind_counts.items())),
         "chunk_kind_counts": dict(sorted(chunk_kind_counts.items())),
         "chunk_stats": {
             "avg_char_count": round(sum(char_counts) / len(char_counts), 2),
@@ -165,6 +168,7 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
 
     block_docs, block_warnings = extract_markdown_blocks(source_docs)
     warnings.extend(block_warnings)
+    block_kind_counts = Counter(str(doc.metadata.get("block_kind", "paragraph")) for doc in block_docs)
 
     chunked_docs = chunk_markdown_blocks(
         block_docs,
@@ -195,6 +199,7 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
         markdown_paths,
         parser_counts=parser_counts,
         block_count=len(block_docs),
+        block_kind_counts=block_kind_counts,
         rows=rows,
         warnings=warnings,
     )
@@ -216,6 +221,7 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
         "embed_model": config.embed_model,
         "parser": config.parser,
         "parser_counts": dict(sorted(parser_counts.items())),
+        "block_kind_counts": dict(sorted(block_kind_counts.items())),
         "warnings": warnings,
         "manifest": manifest,
         "active_index_pointer": str(active_index_pointer) if active_index_pointer else None,

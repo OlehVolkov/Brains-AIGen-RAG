@@ -14,8 +14,6 @@ def chunk_pdf_blocks(
     chunk_size: int,
     chunk_overlap: int,
 ) -> list[Document]:
-    from langchain_core.documents import Document
-
     if not documents:
         return []
 

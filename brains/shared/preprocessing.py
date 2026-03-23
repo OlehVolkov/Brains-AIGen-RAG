@@ -160,13 +160,19 @@ def _is_navigation_only_block(lines: Sequence[str]) -> bool:
 
 def _is_navigation_list_item(line: str) -> bool:
     bullet_stripped = re.sub(r"^\s*[-*+]\s+", "", line).strip()
-    return _is_navigation_only_line(bullet_stripped)
+    return _is_navigation_only_line(bullet_stripped) or _is_link_only_line(bullet_stripped)
 
 
 def _is_navigation_only_line(line: str) -> bool:
     if not line:
         return False
     return bool(_NAV_LINE_RE.fullmatch(line))
+
+
+def _is_link_only_line(line: str) -> bool:
+    if not line:
+        return False
+    return bool(re.fullmatch(_LINK_TOKEN_RE, line))
 
 
 def _is_page_furniture_line(line: str, *, page_label: str) -> bool:

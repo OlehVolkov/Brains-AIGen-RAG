@@ -173,6 +173,70 @@ def test_chunk_markdown_blocks_preserves_formula_and_table_context() -> None:
     assert "Pairformer | Pairformer > Methods" in chunked[0].page_content
 
 
+def test_extract_markdown_blocks_excludes_references_and_marks_abstract() -> None:
+    blocks, warnings = extract_markdown_blocks(
+        [
+            Document(
+                page_content="Abstract\n\nThis note summarizes the paper.",
+                metadata={
+                    "source_path": "EN/Pairformer.md",
+                    "source_file": "Pairformer.md",
+                    "page": 0,
+                    "page_label": "md",
+                    "title": "Pairformer",
+                    "section": "Abstract",
+                    "section_path": "Pairformer > Abstract",
+                    "heading_level": 1,
+                    "language_branch": "EN",
+                    "parser": "native",
+                },
+            ),
+            Document(
+                page_content="References\n\n- Smith et al. 2024",
+                metadata={
+                    "source_path": "EN/Pairformer.md",
+                    "source_file": "Pairformer.md",
+                    "page": 0,
+                    "page_label": "md",
+                    "title": "Pairformer",
+                    "section": "References",
+                    "section_path": "Pairformer > References",
+                    "heading_level": 1,
+                    "language_branch": "EN",
+                    "parser": "native",
+                },
+            ),
+        ]
+    )
+
+    assert [block.metadata["block_kind"] for block in blocks] == ["abstract"]
+    assert any("Excluded 1 markdown reference sections" in warning for warning in warnings)
+
+
+def test_extract_markdown_blocks_detects_figure_caption() -> None:
+    blocks, _warnings = extract_markdown_blocks(
+        [
+            Document(
+                page_content="Figure 1: Pair update mechanism",
+                metadata={
+                    "source_path": "EN/Pairformer.md",
+                    "source_file": "Pairformer.md",
+                    "page": 0,
+                    "page_label": "md",
+                    "title": "Pairformer",
+                    "section": "Methods",
+                    "section_path": "Pairformer > Methods",
+                    "heading_level": 2,
+                    "language_branch": "EN",
+                    "parser": "native",
+                },
+            )
+        ]
+    )
+
+    assert [block.metadata["block_kind"] for block in blocks] == ["figure_caption"]
+
+
 def test_search_vault_falls_back_to_fts_when_embeddings_fail(monkeypatch, tmp_path: Path) -> None:
     paths = resolve_vault_paths(index_root=tmp_path / "index")
 
