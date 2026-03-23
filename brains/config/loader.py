@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from pydantic_settings import (
@@ -19,23 +20,33 @@ def project_root() -> Path:
 
 
 def repo_root() -> Path:
-    return project_root()
+    override = os.getenv("BRAINS_REPO_ROOT")
+    if override:
+        return Path(override).resolve()
+
+    root = brains_root()
+    if root.name == ".brains":
+        return root.parent.resolve()
+    return root.resolve()
 
 
 def brains_root() -> Path:
-    return project_root() / ".brains"
+    override = os.getenv("BRAINS_ROOT")
+    if override:
+        return Path(override).resolve()
+    return project_root().resolve()
 
 
 def config_path() -> Path:
-    return project_root() / "config" / "brains.toml"
+    return brains_root() / "config" / "brains.toml"
 
 
 def local_config_path() -> Path:
-    return project_root() / "config" / "local.toml"
+    return brains_root() / "config" / "local.toml"
 
 
 def dotenv_path() -> Path:
-    return project_root() / ".env"
+    return brains_root() / ".env"
 
 
 def resolve_repo_path(base_repo_root: Path, raw_path: str | Path) -> Path:
