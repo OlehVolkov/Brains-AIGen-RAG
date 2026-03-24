@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from brains.shared import logger
-from brains.shared.langchain import embed_texts
+from brains.shared.langchain import embed_texts_with_model_fallback
+from brains.shared.ollama import resolve_installed_ollama_model
 from brains.shared.text import chunk_id
 from brains.sources.pdf.chunking import chunk_pdf_blocks
 from brains.sources.pdf.models import IndexConfig
@@ -62,6 +63,8 @@ def build_rows(
 def write_manifest(
     config: IndexConfig,
     pdf_paths: Sequence[Path],
+    *,
+    actual_embed_model: str,
     rows: Sequence[dict[str, Any]],
 ) -> dict[str, Any]:
     config.paths.index_root.mkdir(parents=True, exist_ok=True)
@@ -80,7 +83,7 @@ def write_manifest(
         "parser": config.parser,
         "grobid_url": config.grobid_url,
         "marker_command": config.marker_command,
-        "embed_model": config.embed_model,
+        "embed_model": actual_embed_model,
         "ollama_base_url": config.ollama_base_url,
         "chunk_size": config.chunk_size,
         "chunk_overlap": config.chunk_overlap,
@@ -178,13 +181,23 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
     if not chunked_docs:
         raise ValueError("No PDF content could be prepared for indexing.")
 
+    resolved_embed_model = resolve_installed_ollama_model(
+        config.embed_model,
+        base_url=config.ollama_base_url,
+        fallback_models=get_config().ollama.embed_fallback_models,
+        allow_fallback=True,
+    )
+    if resolved_embed_model.warning:
+        warnings.append(resolved_embed_model.warning)
     logger.info("Embedding {} PDF chunks into LanceDB.", len(chunked_docs))
-    vectors = embed_texts(
+    vectors, actual_embed_model, embedding_warnings = embed_texts_with_model_fallback(
         [doc.page_content for doc in chunked_docs],
-        model=config.embed_model,
+        model=resolved_embed_model.resolved,
+        fallback_models=get_config().ollama.embed_fallback_models,
         base_url=config.ollama_base_url,
         batch_size=config.batch_size,
     )
+    warnings.extend(embedding_warnings)
     rows = build_rows(chunked_docs, vectors)
     config.paths.db_uri.mkdir(parents=True, exist_ok=True)
     db = lancedb.connect(str(config.paths.db_uri))
@@ -194,7 +207,12 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
         mode="overwrite" if config.overwrite else "create",
     )
     table.create_fts_index("text", replace=True)
-    manifest = write_manifest(config, pdf_paths, rows)
+    manifest = write_manifest(
+        config,
+        pdf_paths,
+        actual_embed_model=actual_embed_model,
+        rows=rows,
+    )
     active_index_pointer = write_active_index_pointer(config, manifest)
     logger.info(
         "Indexed {} PDFs into table {} with {} chunks.",
@@ -210,7 +228,7 @@ def index_pdfs(config: IndexConfig) -> dict[str, Any]:
         "chunk_count": len(rows),
         "manifest_path": str(config.paths.manifest_path),
         "db_uri": str(config.paths.db_uri),
-        "embed_model": config.embed_model,
+        "embed_model": actual_embed_model,
         "warnings": warnings,
         "manifest": manifest,
         "active_index_pointer": str(active_index_pointer) if active_index_pointer else None,

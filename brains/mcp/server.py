@@ -13,12 +13,19 @@ from brains.mcp.tools.notes import (
     validate_note_tool,
     write_note_tool,
 )
-from brains.mcp.tools.search import find_related_notes_tool, search_pdfs_tool, search_vault_tool
+from brains.mcp.tools.search import (
+    explain_path_tool,
+    find_related_notes_tool,
+    search_graph_tool,
+    search_pdfs_tool,
+    search_vault_tool,
+)
 from brains.config.loader import repo_root
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 ListNotesBranch = Literal["EN", "UA", "root", "all"]
-SearchMode = Literal["auto", "vector", "fts", "hybrid"]
+VaultSearchMode = Literal["auto", "vector", "fts", "hybrid", "hybrid-graph"]
+PdfSearchMode = Literal["auto", "vector", "fts", "hybrid"]
 Reranker = Literal["none", "rrf", "cross-encoder", "ollama"]
 RelatedBranch = Literal["same", "all"]
 WriteMode = Literal["overwrite", "append", "prepend"]
@@ -75,10 +82,11 @@ def build_mcp_server(
     )
     def search_vault_mcp(
         query: str,
-        mode: SearchMode = "hybrid",
+        mode: VaultSearchMode = "hybrid",
         reranker: Reranker = "none",
         k: int = 5,
         fetch_k: int = 20,
+        graph_max_hops: int | None = None,
         min_score: float | None = None,
         max_distance: float | None = None,
         snippet_chars: int = 320,
@@ -90,6 +98,7 @@ def build_mcp_server(
             reranker=reranker,
             k=k,
             fetch_k=fetch_k,
+            graph_max_hops=graph_max_hops,
             min_score=min_score,
             max_distance=max_distance,
             snippet_chars=snippet_chars,
@@ -102,7 +111,7 @@ def build_mcp_server(
     )
     def search_pdfs_mcp(
         query: str,
-        mode: SearchMode = "hybrid",
+        mode: PdfSearchMode = "hybrid",
         reranker: Reranker = "none",
         k: int = 5,
         fetch_k: int = 20,
@@ -124,6 +133,44 @@ def build_mcp_server(
         )
 
     @server.tool(
+        name="search_graph",
+        description="Search the repository graph for note-level relationships and structural evidence.",
+    )
+    def search_graph_mcp(
+        query: str,
+        k: int = 5,
+        max_hops: int = 1,
+        index_root: str | None = None,
+        graph_file: str | None = None,
+    ) -> dict[str, object]:
+        return search_graph_tool(
+            query=query,
+            k=k,
+            max_hops=max_hops,
+            index_root=index_root,
+            graph_file=graph_file,
+        )
+
+    @server.tool(
+        name="explain_path",
+        description="Explain the graph path between two notes or note-like queries.",
+    )
+    def explain_path_mcp(
+        source: str,
+        target: str,
+        max_hops: int = 3,
+        index_root: str | None = None,
+        graph_file: str | None = None,
+    ) -> dict[str, object]:
+        return explain_path_tool(
+            source=source,
+            target=target,
+            max_hops=max_hops,
+            index_root=index_root,
+            graph_file=graph_file,
+        )
+
+    @server.tool(
         name="find_related_notes",
         description="Find candidate related notes for an existing vault note.",
     )
@@ -133,6 +180,7 @@ def build_mcp_server(
         branch: RelatedBranch = "same",
         k: int = 5,
         fetch_k: int = 20,
+        graph_max_hops: int | None = None,
         snippet_chars: int = 240,
         index_root: str | None = None,
     ) -> dict[str, object]:
@@ -142,6 +190,7 @@ def build_mcp_server(
             branch=branch,
             k=k,
             fetch_k=fetch_k,
+            graph_max_hops=graph_max_hops,
             snippet_chars=snippet_chars,
             index_root=index_root,
             repo_root=active_repo_root,

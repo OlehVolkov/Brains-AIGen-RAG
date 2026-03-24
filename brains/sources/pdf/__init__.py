@@ -1,5 +1,4 @@
 from brains.sources.pdf.fetch import (
-    DEFAULT_NOTE_GLOBS,
     candidate_pdf_urls,
     extract_http_urls,
     fetch_manifest_path,
@@ -40,7 +39,6 @@ __all__ = [
     "PARSER_CHOICES",
     "SEARCH_COLUMNS",
     "SearchConfig",
-    "DEFAULT_NOTE_GLOBS",
     "_table_to_markdown",
     "build_rows",
     "candidate_pdf_urls",

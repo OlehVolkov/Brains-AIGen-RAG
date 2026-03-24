@@ -18,11 +18,11 @@ def validate_search_config(config) -> None:
         raise ValueError("k must be greater than 0.")
     if config.fetch_k < config.k:
         raise ValueError("fetch_k must be greater than or equal to k.")
-    if config.mode not in {"auto", "vector", "fts", "hybrid"}:
-        raise ValueError("mode must be one of: auto, vector, fts, hybrid.")
+    if config.mode not in {"auto", "vector", "fts", "hybrid", "hybrid-graph"}:
+        raise ValueError("mode must be one of: auto, vector, fts, hybrid, hybrid-graph.")
     if config.reranker not in {"none", "rrf", "cross-encoder", "ollama"}:
         raise ValueError("reranker must be one of: none, rrf, cross-encoder, ollama.")
-    if config.mode not in {"auto", "hybrid"} and config.reranker == "rrf":
+    if config.mode not in {"auto", "hybrid", "hybrid-graph"} and config.reranker == "rrf":
         raise ValueError("rrf reranking is only supported for hybrid search.")
     if config.min_score is not None and not 0.0 <= config.min_score <= 1.0:
         raise ValueError("min_score must be between 0.0 and 1.0.")
@@ -54,6 +54,25 @@ def resolve_query_mode(*, query: str, requested_mode: str) -> tuple[str, str | N
     )
     if any(re.search(pattern, normalized) for pattern in exact_patterns):
         return "fts", "Auto mode chose FTS for an exact-match or path-like query."
+
+    relation_patterns = (
+        r"\brelated\b",
+        r"\brelationship\b",
+        r"\bconnect(?:ed|ion)?\b",
+        r"\bpath\b",
+        r"\bdepends?\b",
+        r"\bcompare\b",
+        r"\bversus\b",
+        r"\bvs\b",
+        r"\bbetween\b.+\band\b",
+        r"\bshared\b",
+        r"\bcommon\b",
+        r"\bbridge\b",
+        r"\bdifference between\b",
+        r"\bhow .* relate",
+    )
+    if any(re.search(pattern, normalized, re.I) for pattern in relation_patterns):
+        return "hybrid-graph", "Auto mode chose hybrid-graph retrieval for a relation-oriented query."
 
     if re.search(r"\b[A-Z0-9_-]{4,}\b", normalized) and len(normalized.split()) <= 3:
         return "fts", "Auto mode chose FTS for a short exact-term query."

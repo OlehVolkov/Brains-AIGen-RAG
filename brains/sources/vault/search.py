@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from typing import Any, Sequence
+from pathlib import Path
 
+from brains.config import get_config
 from brains.shared import logger
+from brains.config.loader import resolve_graph_paths
+from brains.sources.graph.search import expand_seed_note_paths
 from brains.shared.retrieval import (
     apply_result_thresholds,
     apply_ollama_rerank,
@@ -38,8 +42,6 @@ VAULT_SEARCH_COLUMNS = [
     "char_count",
     "word_count",
 ]
-
-
 def search_vault_knowledge(
     *,
     query: str,
@@ -47,6 +49,7 @@ def search_vault_knowledge(
     reranker: str = "none",
     k: int = 5,
     fetch_k: int = 20,
+    graph_max_hops: int | None = None,
     snippet_chars: int = 320,
     min_score: float | None = None,
     max_distance: float | None = None,
@@ -61,6 +64,7 @@ def search_vault_knowledge(
             reranker=reranker,
             k=k,
             fetch_k=fetch_k,
+            graph_max_hops=graph_max_hops,
             snippet_chars=snippet_chars,
             min_score=min_score,
             max_distance=max_distance,
@@ -78,10 +82,12 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
     )
     if route_reason:
         warnings.append(route_reason)
+    graph_enabled = effective_mode == "hybrid-graph"
+    base_mode = "hybrid" if graph_enabled else effective_mode
     effective_reranker = (
-        "rrf" if effective_mode == "hybrid" and config.reranker == "none" else config.reranker
+        "rrf" if base_mode in {"hybrid", "hybrid-graph"} and config.reranker == "none" else config.reranker
     )
-    if effective_mode != "hybrid" and effective_reranker == "rrf":
+    if base_mode != "hybrid" and effective_reranker == "rrf":
         effective_reranker = "none"
         warnings.append(
             "RRF reranking requires hybrid retrieval; falling back to base ranking."
@@ -90,7 +96,7 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
     table = open_table(config.paths)
     query_vector: list[float] | None = None
 
-    if config.mode in {"vector", "hybrid"}:
+    if base_mode in {"vector", "hybrid"}:
         try:
             query_vector = embed_query_text(
                 config.query,
@@ -99,7 +105,7 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
             )
         except Exception as exc:
             logger.warning("Vault vector embeddings unavailable; falling back to FTS.")
-            effective_mode = "fts"
+            base_mode = "fts"
             warnings.append(
                 "Vector embeddings unavailable; falling back to FTS search "
                 f"({type(exc).__name__}: {exc})."
@@ -117,7 +123,7 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
     )
 
     try:
-        if effective_mode == "vector":
+        if base_mode == "vector":
             rows = run_vector_search(
                 table,
                 select_columns=VAULT_SEARCH_COLUMNS,
@@ -127,7 +133,7 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
                 reranker=effective_reranker,
                 cross_encoder_model=config.cross_encoder_model,
             )
-        elif effective_mode == "fts":
+        elif base_mode == "fts":
             rows = run_fts_search(
                 table,
                 select_columns=VAULT_SEARCH_COLUMNS,
@@ -160,7 +166,7 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
                 fetch_k=config.fetch_k,
                 reranker=effective_reranker,
             )
-            if effective_mode == "vector":
+            if base_mode == "vector":
                 rows = run_vector_search(
                     table,
                     select_columns=VAULT_SEARCH_COLUMNS,
@@ -170,7 +176,7 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
                     reranker=effective_reranker,
                     cross_encoder_model=config.cross_encoder_model,
                 )
-            elif effective_mode == "fts":
+            elif base_mode == "fts":
                 rows = run_fts_search(
                     table,
                     select_columns=VAULT_SEARCH_COLUMNS,
@@ -222,14 +228,121 @@ def search_vault(config: VaultSearchConfig) -> dict[str, Any]:
         payload["snippet"] = snippet(str(payload.get("text", "")), config.snippet_chars)
         prepared.append(payload)
 
+    if graph_enabled:
+        prepared, graph_warnings = _merge_graph_expansion(config, prepared)
+        warnings.extend(graph_warnings)
+
     prepared = _with_warnings(prepared, warnings)
+    reported_mode = effective_mode if graph_enabled else base_mode
     logger.info("Vault search produced {} hits.", len(prepared))
     return {
         "results": prepared,
         "warnings": warnings,
-        "effective_mode": effective_mode,
+        "effective_mode": reported_mode,
         "effective_reranker": effective_reranker,
     }
+
+
+def _base_row_score(row: dict[str, Any], *, total_rows: int) -> float:
+    score = row.get("_relevance_score")
+    if isinstance(score, (int, float)):
+        return float(score)
+    score = row.get("_score")
+    if isinstance(score, (int, float)):
+        return float(score)
+    distance = row.get("_distance")
+    if isinstance(distance, (int, float)):
+        return 1.0 / (1.0 + float(distance))
+    rank = int(row.get("rank", total_rows))
+    return max(total_rows - rank + 1, 1) / max(total_rows, 1)
+
+
+def _graph_row_payload(hit: dict[str, Any], *, snippet_chars: int) -> dict[str, Any]:
+    evidence = hit.get("evidence", [])
+    evidence_text = "; ".join(str(item) for item in evidence[:3])
+    text = f"{hit['title']}\n{evidence_text}".strip()
+    return {
+        "id": f"graph::{hit['source_path']}",
+        "text": text,
+        "source_path": hit["source_path"],
+        "source_file": hit["source_path"].split("/")[-1],
+        "title": hit["title"],
+        "section": "Graph note",
+        "section_path": hit["title"],
+        "heading_level": 1,
+        "language_branch": hit.get("language_branch", "root"),
+        "parser": "graph",
+        "block_kind": "graph",
+        "chunk_index": -1,
+        "chunk_kind": "graph_note",
+        "block_count": 1,
+        "char_count": len(text),
+        "word_count": len(text.split()),
+        "graph_evidence": list(evidence),
+        "snippet": snippet(text, snippet_chars),
+    }
+
+
+def _merge_graph_expansion(
+    config: VaultSearchConfig,
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    if not rows:
+        return rows, []
+
+    try:
+        excluded_files = set(get_config().graph.governance_files)
+        seed_paths: list[str] = []
+        for row in rows:
+            source_path = str(row["source_path"])
+            if Path(source_path).name in excluded_files:
+                continue
+            if source_path in seed_paths:
+                continue
+            seed_paths.append(source_path)
+            if len(seed_paths) >= min(config.k, 3):
+                break
+        if not seed_paths:
+            seed_paths = list(dict.fromkeys(str(row["source_path"]) for row in rows[: min(config.k, 2)]))
+        graph_paths = resolve_graph_paths()
+        graph_hits = expand_seed_note_paths(
+            graph_path=graph_paths.graph_path,
+            seed_paths=seed_paths,
+            max_hops=config.graph_max_hops,
+            limit=max(config.fetch_k, config.k),
+        )
+    except FileNotFoundError:
+        return rows, ["Graph artifacts not found; skipping graph expansion."]
+    except Exception as exc:
+        return rows, [f"Graph expansion unavailable ({type(exc).__name__}: {exc})."]
+
+    if not graph_hits:
+        return rows, []
+
+    graph_scores = {str(hit["source_path"]): float(hit["score"]) for hit in graph_hits}
+    existing_paths = {str(row["source_path"]) for row in rows}
+    total_rows = len(rows)
+    merged: list[dict[str, Any]] = []
+
+    for row in rows:
+        payload = dict(row)
+        payload["_graph_boost"] = graph_scores.get(str(payload["source_path"]), 0.0)
+        payload["_combined_score"] = _base_row_score(payload, total_rows=total_rows) + float(payload["_graph_boost"])
+        merged.append(payload)
+
+    for hit in graph_hits:
+        source_path = str(hit["source_path"])
+        if source_path in existing_paths:
+            continue
+        payload = _graph_row_payload(hit, snippet_chars=config.snippet_chars)
+        payload["_graph_boost"] = float(hit["score"])
+        payload["_combined_score"] = float(hit["score"]) * 0.6
+        merged.append(payload)
+
+    merged.sort(key=lambda item: float(item.get("_combined_score", 0.0)), reverse=True)
+    for rank, row in enumerate(merged[: config.k], start=1):
+        row["rank"] = rank
+    return merged[: config.k], []
 
 
 def format_vault_search_results(payload: dict[str, Any]) -> str:
@@ -251,5 +364,7 @@ def format_vault_search_results(payload: dict[str, Any]) -> str:
             f"section={section} | chunk={row['chunk_index']}{score_text}"
         )
         lines.append(row["snippet"])
+        for evidence in row.get("graph_evidence", [])[:3]:
+            lines.append(f"- {evidence}")
         lines.append("")
     return "\n".join(lines).rstrip()

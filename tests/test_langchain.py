@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from brains.shared.langchain import embed_texts
+from brains.shared.langchain import embed_texts, embed_texts_with_model_fallback
 
 
 def test_embed_texts_uses_primary_embed_endpoint(monkeypatch) -> None:
@@ -106,3 +106,34 @@ def test_embed_texts_retries_transient_primary_embed_failure(monkeypatch) -> Non
             {"model": "bge-m3:latest", "input": ["alpha"]},
         ),
     ]
+
+
+def test_embed_texts_with_model_fallback_uses_second_model(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_embed_texts(
+        texts,
+        *,
+        model: str,
+        base_url: str,
+        batch_size: int,
+    ):
+        calls.append(model)
+        if model == "bge-m3:latest":
+            raise RuntimeError("HTTP 500")
+        return [[9.0, 1.0]]
+
+    monkeypatch.setattr("brains.shared.langchain.embed_texts", fake_embed_texts)
+
+    vectors, actual_model, warnings = embed_texts_with_model_fallback(
+        ["alpha"],
+        model="bge-m3:latest",
+        fallback_models=["bge-large:latest", "nomic-embed-text:latest"],
+        base_url="http://127.0.0.1:11434",
+        batch_size=8,
+    )
+
+    assert vectors == [[9.0, 1.0]]
+    assert actual_model == "bge-large:latest"
+    assert calls == ["bge-m3:latest", "bge-large:latest"]
+    assert any("fell back from 'bge-m3:latest' to 'bge-large:latest'" in warning for warning in warnings)

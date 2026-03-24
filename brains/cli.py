@@ -4,6 +4,7 @@ import typer
 
 from brains.shared import configure_logging
 from brains.commands import (
+    register_graph_commands,
     register_health_commands,
     register_mcp_commands,
     register_pdf_commands,
@@ -22,6 +23,7 @@ main = app
 
 configure_logging()
 
+register_graph_commands(app)
 register_health_commands(app)
 register_mcp_commands(app)
 register_pdf_commands(app)

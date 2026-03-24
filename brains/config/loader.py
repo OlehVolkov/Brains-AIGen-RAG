@@ -11,7 +11,7 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
 )
 
-from brains.config.models import BrainsConfig, BrainsPaths, ResearchPaths
+from brains.config.models import BrainsConfig, BrainsPaths, GraphPaths, ResearchPaths
 from brains.config.sources import CombinedTomlSource
 
 
@@ -203,4 +203,25 @@ def resolve_research_paths(
         index_root=resolved_index_root,
         memory_path=resolved_index_root / "memory.jsonl",
         sessions_dir=resolved_index_root / "sessions",
+    )
+
+
+def resolve_graph_paths(
+    *,
+    index_root: str | Path | None = None,
+    graph_file: str | None = None,
+) -> GraphPaths:
+    config = get_config()
+    current_repo_root = repo_root()
+    resolved_index_root = resolve_repo_path(
+        current_repo_root,
+        index_root or config.graph.index_root,
+    )
+    graph_filename = graph_file or config.graph.graph_file
+    return GraphPaths(
+        repo_root=current_repo_root,
+        brains_root=brains_root(),
+        index_root=resolved_index_root,
+        graph_path=resolved_index_root / graph_filename,
+        manifest_path=resolved_index_root / "manifest.json",
     )

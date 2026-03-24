@@ -445,6 +445,137 @@ def test_search_vault_auto_mode_routes_path_queries_to_fts(
     assert any("Auto mode chose FTS" in warning for warning in payload["warnings"])
 
 
+def test_search_vault_auto_mode_routes_relation_queries_to_hybrid_graph(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    paths = resolve_vault_paths(index_root=tmp_path / "index")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr("brains.sources.vault.search.open_table", lambda paths_arg: object())
+    monkeypatch.setattr(
+        "brains.sources.vault.search.embed_query_text",
+        lambda *args, **kwargs: [0.1, 0.2],
+    )
+    def fake_hybrid_search(table, **kwargs):
+        captured["query_vector"] = kwargs["query_vector"]
+        return [
+            {
+                "text": "pairformer snippet",
+                "source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+                "source_file": "1.2.2. Pairformer.md",
+                "title": "Pairformer",
+                "section": "What is the Pairformer?",
+                "section_path": "Pairformer > What is the Pairformer?",
+                "heading_level": 2,
+                "language_branch": "EN",
+                "parser": "native",
+                "block_kind": "paragraph",
+                "chunk_index": 0,
+                "chunk_kind": "paragraph",
+                "block_count": 1,
+                "char_count": 20,
+                "word_count": 3,
+                "_score": 0.8,
+            }
+        ]
+
+    monkeypatch.setattr("brains.sources.vault.search.run_hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(
+        "brains.sources.vault.search.expand_seed_note_paths",
+        lambda **kwargs: [
+            {
+                "source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.3. Diffusion Module.md",
+                "title": "Diffusion Module",
+                "language_branch": "EN",
+                "score": 0.9,
+                "evidence": ["expanded via links_to from `EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md`"],
+            }
+        ],
+    )
+
+    payload = search_vault(
+        VaultSearchConfig(
+            paths=paths,
+            query="how is pairformer related to diffusion module",
+            mode="auto",
+            reranker="none",
+            graph_max_hops=1,
+        )
+    )
+
+    assert payload["effective_mode"] == "hybrid-graph"
+    assert any("Auto mode chose hybrid-graph" in warning for warning in payload["warnings"])
+    assert captured["query_vector"] == [0.1, 0.2]
+    assert [row["source_path"] for row in payload["results"]] == [
+        "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+        "EN/1. AlphaFold3/1.2. Architecture/1.2.3. Diffusion Module.md",
+    ]
+
+
+def test_search_vault_hybrid_graph_merges_graph_only_notes(monkeypatch, tmp_path: Path) -> None:
+    paths = resolve_vault_paths(index_root=tmp_path / "index")
+
+    monkeypatch.setattr("brains.sources.vault.search.open_table", lambda paths_arg: object())
+    monkeypatch.setattr(
+        "brains.sources.vault.search.embed_query_text",
+        lambda *args, **kwargs: [0.1, 0.2],
+    )
+    monkeypatch.setattr(
+        "brains.sources.vault.search.run_hybrid_search",
+        lambda table, **kwargs: [
+            {
+                "text": "pairformer snippet",
+                "source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+                "source_file": "1.2.2. Pairformer.md",
+                "title": "Pairformer",
+                "section": "What is the Pairformer?",
+                "section_path": "Pairformer > What is the Pairformer?",
+                "heading_level": 2,
+                "language_branch": "EN",
+                "parser": "native",
+                "block_kind": "paragraph",
+                "chunk_index": 0,
+                "chunk_kind": "paragraph",
+                "block_count": 1,
+                "char_count": 20,
+                "word_count": 3,
+                "_score": 0.8,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "brains.sources.vault.search.expand_seed_note_paths",
+        lambda **kwargs: [
+            {
+                "source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.3. Diffusion Module.md",
+                "title": "Diffusion Module",
+                "language_branch": "EN",
+                "score": 0.9,
+                "evidence": ["expanded via links_to from `EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md`"],
+            }
+        ],
+    )
+
+    payload = search_vault(
+        VaultSearchConfig(
+            paths=paths,
+            query="pairformer",
+            mode="hybrid-graph",
+            reranker="none",
+            graph_max_hops=1,
+            k=2,
+        )
+    )
+
+    assert [row["source_path"] for row in payload["results"]] == [
+        "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+        "EN/1. AlphaFold3/1.2. Architecture/1.2.3. Diffusion Module.md",
+    ]
+    assert payload["results"][1]["chunk_kind"] == "graph_note"
+    assert payload["results"][1]["parser"] == "graph"
+
+
 def test_search_vault_applies_min_score_threshold(monkeypatch, tmp_path: Path) -> None:
     paths = resolve_vault_paths(index_root=tmp_path / "index")
 

@@ -75,6 +75,7 @@ class VaultSearchConfig(BaseModel):
     )
     k: int = 5
     fetch_k: int = 20
+    graph_max_hops: int = Field(default_factory=lambda: get_config().graph.max_hops)
     snippet_chars: int = 320
     min_score: float | None = Field(default_factory=lambda: get_config().vault.min_score)
     max_distance: float | None = Field(default_factory=lambda: get_config().vault.max_distance)
@@ -93,6 +94,7 @@ class VaultSearchConfig(BaseModel):
         ollama_rerank_model: str | None = None,
         k: int = 5,
         fetch_k: int = 20,
+        graph_max_hops: int | None = None,
         snippet_chars: int = 320,
         min_score: float | None = None,
         max_distance: float | None = None,
@@ -117,6 +119,9 @@ class VaultSearchConfig(BaseModel):
             ),
             k=k,
             fetch_k=fetch_k,
+            graph_max_hops=(
+                config.graph.max_hops if graph_max_hops is None else graph_max_hops
+            ),
             snippet_chars=snippet_chars,
             min_score=config.vault.min_score if min_score is None else min_score,
             max_distance=config.vault.max_distance if max_distance is None else max_distance,

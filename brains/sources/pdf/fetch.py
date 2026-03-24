@@ -10,13 +10,7 @@ from typing import Any, Sequence
 from urllib import error, parse, request
 
 from brains.shared import logger
-from brains.config import BrainsPaths
-
-
-DEFAULT_NOTE_GLOBS = (
-    "EN/Literature and Priorities.md",
-    "UA/Література та пріоритети.md",
-)
+from brains.config import BrainsPaths, get_config
 
 URL_PATTERN = re.compile(r"https?://[^\s<>\]\"']+")
 FILENAME_PATTERN = re.compile(r"filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?", re.IGNORECASE)
@@ -71,7 +65,7 @@ def list_source_note_paths(
     repo_root: Path,
     note_globs: Sequence[str] | None = None,
 ) -> list[Path]:
-    patterns = tuple(note_globs or DEFAULT_NOTE_GLOBS)
+    patterns = tuple(note_globs or get_config().pdf.fetch_note_globs)
     results: list[Path] = []
     seen: set[Path] = set()
     for pattern in patterns:

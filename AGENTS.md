@@ -126,6 +126,11 @@ Local instructions for agents working on the repository's `brains` tooling and i
 - Do not hardcode the repository path in commands, docs, scripts, tests, or examples.
 - Treat portable path usage as a must-have: prefer `%CD%`, relative paths from the current working directory, or placeholders like `<REPO_ROOT>`.
 - Use `BaseSettings`-driven `pydantic` config under `config/` and `.env`.
+- Keep repository-specific operational defaults in TOML instead of Python constants when they are expected to vary between repositories or vault layouts.
+- In particular:
+  - keep graph governance exclusions in `[graph].governance_files`,
+  - keep explicit special mirror exceptions in `[graph].special_page_pairs`,
+  - keep default health probes in `[health].pdf_probe_query` and `[health].vault_probe_query`.
 - Keep the CLI on `Typer`; use `Rich` for user-facing output and `Loguru` for runtime logging.
 - Virtual environments are local-only artifacts and must never be committed.
 - Prefer running Python for `/.brains` through the Windows project environment:
@@ -138,6 +143,8 @@ Local instructions for agents working on the repository's `brains` tooling and i
 - `uvx` is for one-off external Python CLI tools that should not be installed into the project environment.
 - `npx` is for one-off Node/npm CLI tools.
 - Use `npx` for non-Python tools such as `markdownlint-cli`; do not route npm tools through `uvx`.
+- For `/.brains` helper scripts that belong to the normal local workflow, prefer portable Python wrappers over shell-only wrappers when practical.
+- For literature PDF download/reindex workflow, treat `/.brains/scripts/fetch_literature_pdfs.py` as the canonical reusable wrapper around `brains fetch-pdfs --reindex`.
 - Keep code changes in `/.brains` small, local, and automation-focused.
 - Before adding or keeping a Python dependency, verify that it is actually needed by the current codebase.
 - Prefer checking this explicitly via import search / usage search instead of assuming a package is still needed after refactors.
@@ -148,6 +155,13 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - `uv run ruff check brains tests`
   - `uv run mypy brains`
   - targeted `uv run pytest ...`
+- Treat `uv run mypy brains` as the canonical type-check command for this module.
+- Keep the checked-in mypy configuration runnable as-is in the standard local environment; avoid relying on ad hoc flags for routine verification unless you are explicitly changing the mypy configuration.
+- Keep `follow_imports = "skip"` as the default mypy policy unless a later verified change proves that full import following is stable in this repository.
+- Reason: optional heavy dependency trees such as `docling`, `sentence-transformers`, `transformers`, and `torch` can cause very slow traversal or internal mypy failures in the Windows `.venv` workflow.
+- If mypy appears to hang, first suspect third-party import traversal before assuming a local typing regression.
+- For repeatable diagnosis, use `/.brains/scripts/diagnose_mypy_hang.py` instead of one-off shell probing.
+- Do not remove the mypy import-skipping safeguards for those heavy third-party packages unless a real `uv run mypy brains` run succeeds after the change.
 - Use full `uv run pytest tests -q` only when the whole suite is needed.
 - Prefer adding code to the existing package slices:
   - `brains/config/`
@@ -209,7 +223,8 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest 
 - `brains/config/` is the canonical configuration package for `BaseSettings`, settings sources, and path resolution.
 - `brains/commands/` holds Typer command registration code.
 - `brains/shared/` holds shared utilities used by multiple domains, including runtime helpers, retrieval helpers, formatting, and text utilities.
-- Environment overrides should use nested names such as `BRAINS_OLLAMA__EMBED_MODEL`.
+- Environment overrides should use nested names such as `BRAINS_OLLAMA__PROFILES__EMBEDDINGS__PREFERRED_MODEL`.
+- Do not reintroduce inline fallback configs in `/.brains/scripts` for settings that already belong to `config/brains.toml`; helper scripts should read committed TOML defaults and optional `config/local.toml` overrides instead.
 - `brains/sources/pdf/` contains parser routing, fetch, indexing, retrieval, and reranking logic for PDFs.
 - `brains/sources/pdf/backends/` contains isolated parser backends (`PyMuPDF`, `pdfplumber`, optional `Grobid`, optional `marker`).
 - `brains/sources/vault/` contains markdown file discovery, section splitting, indexing, retrieval, and related-note logic.

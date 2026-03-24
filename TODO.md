@@ -23,6 +23,99 @@ Implemented well:
   - `create_mirror_note`
   - `validate_note`
 
+## GraphRAG Roadmap
+
+Goal:
+
+- add a note-centric graph layer alongside the existing vector/FTS retrieval stack;
+- keep `LanceDB` as the semantic retrieval layer;
+- use `NetworkX` for repository-grounded graph indexing, graph traversal, and explainable related-note expansion.
+
+### Phase 1
+
+Status:
+
+- implemented
+
+Implement a repository graph MVP with local artifacts and basic search.
+
+Scope:
+
+- add `brains/sources/graph/`
+- build graph artifacts under `/.brains/.index/graph_search`
+- index note-level and section-level structure from markdown notes
+- add node types:
+  - `note`
+  - `section`
+  - `tag`
+  - `doi`
+- add edge types:
+  - `has_section`
+  - `links_to`
+  - `has_tag`
+  - `cites_doi`
+  - `mirror_of`
+  - `same_top_level_domain`
+- add CLI commands:
+  - `index-graph`
+  - `search-graph`
+- keep retrieval rule-based and lexical/structural for the first iteration
+- add targeted tests for graph indexing and graph search
+
+### Phase 2
+
+Status:
+
+- baseline implemented
+- current scope includes `hybrid-graph` search mode, seed-note graph expansion, and auto-routing for relation-style vault queries
+- deeper reranking and broader graph-aware retrieval heuristics can still be refined
+
+Integrate graph expansion with the existing vault retriever.
+
+Scope:
+
+- add `hybrid-graph` retrieval mode on top of `search-vault`
+- use vector/FTS results as seed notes
+- expand one or two hops through graph edges
+- rerank merged results with structural bonuses
+- add deterministic routing rules for:
+  - semantic lookup
+  - exact/path lookup
+  - relation/path-style questions
+
+### Phase 3
+
+Status:
+
+- implemented
+- current scope includes `explain-path`, MCP graph tools, graph context inside `think` / `run_experiment`, and graph evidence on related-note candidates
+
+Expose explainability and research-loop usage.
+
+Scope:
+
+- add `explain-path` style graph traversal output
+- expose graph search/explanation through MCP
+- add graph context into `run_experiment` / `think`
+- improve related-note generation with graph evidence
+
+### Phase 4
+
+Status:
+
+- baseline implemented
+- current scope includes heuristic entity nodes, `defines_entity` / `mentions_entity` edges, entity-aware graph traversal, and stronger graph-oriented auto-routing
+- richer extraction and aggregation can still be refined later if the heuristic entity layer proves useful on real queries
+
+Expand beyond note-centric structure into richer domain/entity graph logic.
+
+Scope:
+
+- optional entity extraction
+- richer typed edges between notes and extracted entities
+- graph-assisted aggregation and reasoning
+- stronger query routing once graph semantics prove useful on real tasks
+
 ## MCP Roadmap
 
 ### Stage 1

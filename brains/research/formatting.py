@@ -31,6 +31,22 @@ def format_think_report(payload: dict) -> str:
     lines.append("## Retrieved Context")
     lines.extend(_render_hits("### Vault", payload.get("vault_results", [])))
     lines.append("")
+    lines.extend(_render_hits("### Graph", payload.get("graph_results", [])))
+    lines.append("")
+    graph_paths = payload.get("graph_paths", [])
+    lines.append("### Graph Paths")
+    if not graph_paths:
+        lines.append("- none")
+    else:
+        for row in graph_paths:
+            lines.append(
+                "- "
+                f"{row.get('resolved_source_path')} -> {row.get('resolved_target_path')} "
+                f"(hops={row.get('hops')})"
+            )
+            for step in row.get("summary", [])[:3]:
+                lines.append(f"  {step}")
+    lines.append("")
     lines.extend(_render_hits("### PDF", payload.get("pdf_results", [])))
     lines.append("")
     lines.extend(_render_hits("### Memory", payload.get("memory_results", [])))

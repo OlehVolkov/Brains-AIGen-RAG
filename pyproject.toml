@@ -11,6 +11,7 @@ dependencies = [
     "langchain-text-splitters>=1.1.1",
     "loguru>=0.7.3",
     "mcp>=1.26.0",
+    "networkx>=3.6.1",
     "pdfplumber>=0.11.9",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
@@ -58,4 +59,19 @@ strict = true
 
 [tool.mypy]
 python_version = "3.12"
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "docling.*",
+    "docling_core.*",
+    "docling_ibm_models.*",
+    "docling_parse.*",
+    "sentence_transformers.*",
+    "transformers.*",
+    "torch.*",
+    "torchvision.*",
+]
+follow_imports = "skip"
 ignore_missing_imports = true

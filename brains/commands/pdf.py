@@ -8,7 +8,6 @@ import typer
 from brains.shared import logger, print_json, print_text
 from brains.shared.formatting import format_index_summary
 from brains.sources.pdf import (
-    DEFAULT_NOTE_GLOBS,
     PARSER_CHOICES,
     fetch_pdfs_from_notes,
     format_search_results,
@@ -189,10 +188,7 @@ def register_pdf_commands(app: typer.Typer) -> None:
             list[str] | None,
             typer.Option(
                 "--notes-glob",
-                help=(
-                    "Markdown path or glob pattern for notes to scan. "
-                    f"Defaults to: {', '.join(DEFAULT_NOTE_GLOBS)}."
-                ),
+                help="Markdown path or glob pattern for notes to scan. Uses `pdf.fetch_note_globs` from config when omitted.",
             ),
         ] = None,
         limit: Annotated[int | None, typer.Option(help="Maximum number of unique URLs to attempt.")] = None,

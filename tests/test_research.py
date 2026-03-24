@@ -58,6 +58,24 @@ def test_run_think_loop_falls_back_and_saves_memory(monkeypatch, tmp_path: Path)
         },
     )
     monkeypatch.setattr(
+        "brains.research.orchestration.search_graph_knowledge",
+        lambda **kwargs: {
+            "results": [{"source_path": "EN/Graph.md", "snippet": "graph hit"}],
+            "warnings": [],
+        },
+    )
+    monkeypatch.setattr(
+        "brains.research.orchestration.explain_graph_path_knowledge",
+        lambda **kwargs: {
+            "path_found": True,
+            "resolved_source_path": kwargs["source"],
+            "resolved_target_path": kwargs["target"],
+            "hops": 1,
+            "summary": ["A --links_to--> B"],
+            "warnings": [],
+        },
+    )
+    monkeypatch.setattr(
         "brains.research.orchestration.search_pdf_corpus",
         lambda **kwargs: {
             "results": [{"source_path": "PDF/paper.pdf", "snippet": "pdf hit"}],
@@ -80,6 +98,7 @@ def test_run_think_loop_falls_back_and_saves_memory(monkeypatch, tmp_path: Path)
 
     assert payload["session_id"] == "pairformer-session"
     assert "heuristic mode" in " ".join(payload["warnings"])
+    assert payload["graph_results"][0]["source_path"] == "EN/Graph.md"
     assert paths.memory_path.exists()
     assert (paths.sessions_dir / "pairformer-session.json").exists()
 
@@ -91,6 +110,15 @@ def test_format_think_report_renders_roles() -> None:
             "query": "pairformer",
             "warnings": ["fallback"],
             "vault_results": [{"source_path": "EN/Index.md", "snippet": "vault hit"}],
+            "graph_results": [{"source_path": "EN/Graph.md", "snippet": "graph hit"}],
+            "graph_paths": [
+                {
+                    "resolved_source_path": "EN/A.md",
+                    "resolved_target_path": "EN/B.md",
+                    "hops": 1,
+                    "summary": ["A --links_to--> B"],
+                }
+            ],
             "pdf_results": [],
             "memory_results": [],
             "roles": {
@@ -103,5 +131,7 @@ def test_format_think_report_renders_roles() -> None:
         }
     )
     assert "## Researcher" in rendered
+    assert "### Graph" in rendered
+    assert "### Graph Paths" in rendered
     assert "## Reflections" in rendered
     assert "final" in rendered

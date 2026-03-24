@@ -1,14 +1,29 @@
 [ollama]
-embed_model = "nomic-embed-text"
 base_url = "http://127.0.0.1:11434"
-rerank_model = "llama3.2:3b"
+
+[ollama.profiles.embeddings]
+preferred_model = "bge-m3:latest"
+fallback_models = ["bge-large:latest", "nomic-embed-text:latest", "e5-small:latest", "bge-small:latest"]
+
+[ollama.profiles.lightweight]
+preferred_model = "e5-small:latest"
+fallback_models = ["nomic-embed-text:latest", "bge-small:latest", "bge-large:latest", "bge-m3:latest"]
+
+[ollama.profiles.multilingual]
+preferred_model = "bge-m3:latest"
+fallback_models = ["bge-large:latest", "e5-small:latest", "bge-small:latest"]
+
+[ollama.profiles.reranker]
+preferred_model = "qllama/bge-reranker-large:q8_0"
+fallback_models = []
 
 [reranker]
-cross_encoder_model = "cross-encoder/ms-marco-TinyBERT-L-6"
+cross_encoder_model = "BAAI/bge-reranker-large"
 
 [pdf]
 table_name = "scientific_pdf_chunks"
 pdf_dir = "PDF"
+fetch_note_globs = ["EN/Literature and Priorities.md", "UA/Література та пріоритети.md"]
 index_root = ".brains/.index/pdf_search"
 parser = "auto"
 grobid_url = "http://127.0.0.1:8070"
@@ -23,6 +38,36 @@ index_root = ".brains/.index/vault_search"
 chunk_size = 1200
 chunk_overlap = 200
 batch_size = 32
+
+[graph]
+index_root = ".brains/.index/graph_search"
+graph_file = "graph.json"
+governance_files = [
+  "AGENTS.md",
+  "README.md",
+  "NOTICE.md",
+  "AUDIT.md",
+  "Home.md",
+  "Index.md",
+  "Індекс.md",
+  "Головна.md",
+  "Literature and Priorities.md",
+  "Література та пріоритети.md",
+]
+special_page_pairs = [
+  ["Home.md", "UA/Головна.md"],
+  ["EN/Index.md", "UA/Індекс.md"],
+  ["EN/Literature and Priorities.md", "UA/Література та пріоритети.md"],
+  ["README.md", "UA/README.md"],
+  ["AGENTS.md", "UA/AGENTS.md"],
+  ["NOTICE.md", "UA/NOTICE.md"],
+]
+max_hops = 1
+k = 5
+
+[health]
+pdf_probe_query = "pairformer"
+vault_probe_query = "pairformer"
 
 [research]
 index_root = ".brains/.index/research"

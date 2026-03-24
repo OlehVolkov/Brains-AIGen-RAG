@@ -17,6 +17,7 @@ class SearchMode(StrEnum):
     VECTOR = "vector"
     FTS = "fts"
     HYBRID = "hybrid"
+    HYBRID_GRAPH = "hybrid-graph"
 
 
 class RerankerChoice(StrEnum):
@@ -109,6 +110,10 @@ def register_vault_commands(app: typer.Typer) -> None:
         ] = None,
         k: Annotated[int, typer.Option(help="Final number of hits.")] = 5,
         fetch_k: Annotated[int, typer.Option(help="Number of candidates fetched before reranking.")] = 20,
+        graph_max_hops: Annotated[
+            int | None,
+            typer.Option(help="Maximum graph expansion hops when mode=hybrid-graph."),
+        ] = None,
         min_score: Annotated[
             float | None,
             typer.Option(help="Optional minimum score threshold for score-based results (0.0-1.0)."),
@@ -138,6 +143,7 @@ def register_vault_commands(app: typer.Typer) -> None:
                 ollama_rerank_model=ollama_rerank_model,
                 k=k,
                 fetch_k=fetch_k,
+                graph_max_hops=graph_max_hops,
                 min_score=min_score,
                 max_distance=max_distance,
                 snippet_chars=snippet_chars,

@@ -121,6 +121,34 @@ Canonical default for this repository:
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains search-vault \"pairformer\" --mode hybrid"
 ```
 
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains search-vault \"how is pairformer related to diffusion module\" --mode auto"
+```
+
+- `search-vault --mode auto` can route relation-style queries into `hybrid-graph`
+- auto routing also prefers `hybrid-graph` for more graph-semantics phrasing such as `between X and Y`, `shared`, `common`, or `bridge`
+- `search-vault --mode hybrid-graph` keeps the normal vault retriever as the seed stage and then expands through the repository graph
+
+### Note Graph
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains index-graph"
+```
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains search-graph \"pairformer\" --max-hops 1"
+```
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains explain-path \"Pairformer\" \"Diffusion Module\" --max-hops 2"
+```
+
+- `index-graph` builds a note-centric `NetworkX` graph from markdown notes, sections, wiki-links, mirror pairs, tags, and DOI references
+- the graph now also includes a lightweight heuristic entity layer built from mirrored note titles and note mentions
+- graph artifacts live under `/.brains/.index/graph_search`
+- `search-graph` is for explainable repository-relationship lookup, not a replacement for semantic vector retrieval
+- `explain-path` returns an explicit note-to-note graph explanation with edge types and hop count
+
 ### PDFs
 
 ```bash
@@ -135,11 +163,22 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python 
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains fetch-pdfs --reindex"
 ```
 
+Portable helper wrapper for the same workflow:
+
+```bash
+python3 .brains/scripts/fetch_literature_pdfs.py
+```
+
+Use this Python wrapper when you want a reusable local helper around `fetch-pdfs --reindex` without relying on a shell-specific script. Extra CLI flags are forwarded to `brains fetch-pdfs`.
+
 ### Research
 
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains think \"summarize the main retrieval gaps in this vault\""
 ```
+
+- the research loop now includes graph context and short graph path explanations when the vault results expose connected notes
+- `find_related_notes` can now attach graph evidence for candidate note relationships
 
 ### MCP
 
@@ -150,6 +189,9 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python 
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains mcp --transport streamable-http --host 127.0.0.1 --port 8000"
 ```
+
+- MCP now exposes `search_graph` for structural graph retrieval
+- MCP now exposes `explain_path` for explicit graph path explanations between notes
 
 ### Health Checks
 
@@ -200,11 +242,19 @@ Local overrides belong in:
 
 Environment variables use the `BRAINS_` prefix, for example:
 
-- `BRAINS_OLLAMA__EMBED_MODEL`
+- `BRAINS_OLLAMA__PROFILES__EMBEDDINGS__PREFERRED_MODEL`
 - `BRAINS_OLLAMA__BASE_URL`
 - `BRAINS_PDF__INDEX_ROOT`
 - `BRAINS_VAULT__INDEX_ROOT`
+- `BRAINS_GRAPH__GOVERNANCE_FILES`
+- `BRAINS_HEALTH__VAULT_PROBE_QUERY`
 - `BRAINS_RESEARCH__MODEL`
+
+Repository-specific graph and health defaults now live in TOML as well:
+
+- `[graph].governance_files` controls which broad governance pages are excluded from graph seeding and entity extraction
+- `[graph].special_page_pairs` controls explicit mirror pairs such as `Home.md` ↔ `UA/Головна.md`
+- `[health].pdf_probe_query` and `[health].vault_probe_query` define the default `check-index` probes when the CLI call does not pass `--query`
 
 ## Technology Choices
 
@@ -222,6 +272,14 @@ Current default stack:
 - `LanceDB` for vector + FTS retrieval
 - `Ollama` for local embeddings and optional reranking
 
+Current Ollama-oriented model defaults:
+
+- primary embeddings: `bge-m3:latest`
+- embedding fallbacks: `bge-large:latest`, then `nomic-embed-text:latest`, then lighter optional names such as `e5-small:latest` / `bge-small:latest` when available
+- lightweight embedding profile: prefer `e5-small:latest`, but fall back to `nomic-embed-text:latest` or the installed BGE family instead of failing
+- multilingual embedding profile: prefer `bge-m3:latest`
+- practical reranker stack: `BAAI/bge-reranker-large` for cross-encoder reranking, with local Ollama family tracking via `qllama/bge-reranker-large:q8_0`
+
 ## Retrieval Guidance
 
 Use these defaults unless a task proves they are wrong:
@@ -238,9 +296,22 @@ Use these defaults unless a task proves they are wrong:
 - use `--min-score` or `--max-distance` when weak tail results are worse than returning fewer hits
 - let search use the active index manifest's `embed_model` by default; do not assume vault and PDF indexes share the same embedding dimension
 - treat intermittent Ollama `/api/embed` failures as retryable before concluding that indexing is broken
+- when full-corpus embedding on `bge-m3` or `bge-large` fails mid-run, prefer automatic fallback to the next configured embedding model over abandoning the reindex
 - avoid quoted phrase queries unless the active FTS index is known to support positions; plain-text semantic queries are the safer default
 - inspect `manifest.json` after reindexing to review chunk counts and chunk-size statistics before changing chunking defaults
 - treat retrieval changes as measurable: compare them on a small representative query set before keeping them
+
+Model management helpers:
+
+```bash
+python3 .brains/scripts/check_ollama_models.py --json-output
+```
+
+```bash
+python3 .brains/scripts/ensure_ollama_models.py --json-output
+```
+
+Use them to confirm which Ollama models are installed before large reindex jobs. They are standalone stdlib scripts on purpose, so they still work even when the `/.brains` Python environment is not active.
 
 ## Verification
 
@@ -253,6 +324,14 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run ruff ch
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run mypy brains"
 ```
+
+Mypy guidance for this repository:
+
+- `uv run mypy brains` is the canonical type-check command
+- the checked-in configuration should remain runnable without extra ad hoc flags during routine verification
+- `follow_imports = "skip"` is intentional here because heavy optional dependency trees such as `docling`, `sentence-transformers`, `transformers`, and `torch` can make full import traversal unstable or unreasonably slow
+- if mypy appears to hang, diagnose third-party import traversal first
+- for repeatable diagnosis, use `/.brains/scripts/diagnose_mypy_hang.py`
 
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest tests/test_cli.py -q"

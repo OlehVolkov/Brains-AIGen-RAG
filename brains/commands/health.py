@@ -22,7 +22,7 @@ def register_health_commands(app: typer.Typer) -> None:
         pdf_dir: Annotated[str | None, typer.Option(help="Optional PDF directory override for PDF checks.")] = None,
         index_root: Annotated[str | None, typer.Option(help="Optional index root override.")] = None,
         table_name: Annotated[str | None, typer.Option(help="Optional LanceDB table name override.")] = None,
-        query: Annotated[str | None, typer.Option(help="Optional FTS probe query.")] = "pairformer",
+        query: Annotated[str | None, typer.Option(help="Optional FTS probe query.")] = None,
         timeout_seconds: Annotated[int, typer.Option(help="Maximum seconds to wait before reporting a hang.")] = 10,
         json_output: Annotated[bool, typer.Option(help="Emit JSON output.")] = False,
     ) -> None:
@@ -34,15 +34,17 @@ def register_health_commands(app: typer.Typer) -> None:
                 index_root=index_root,
                 table_name=table_name or settings.pdf.table_name,
             )
+            probe_query = settings.health.pdf_probe_query if query is None else query
         else:
             paths = resolve_vault_paths(
                 index_root=index_root,
                 table_name=table_name or settings.vault.table_name,
             )
+            probe_query = settings.health.vault_probe_query if query is None else query
 
         payload = check_index_health(
             paths,
-            probe_query=query,
+            probe_query=probe_query,
             timeout_seconds=timeout_seconds,
         )
         logger.info("Finished index health-check for target: {}", target.value)

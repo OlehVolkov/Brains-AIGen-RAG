@@ -8,15 +8,19 @@ import pytest
 
 from brains.mcp import (
     create_mirror_note_tool,
+    explain_path_tool,
     find_related_notes_tool,
     list_notes_tool,
     read_note_tool,
     run_experiment_tool,
+    search_graph_tool,
     search_pdfs_tool,
     search_vault_tool,
     validate_note_tool,
     write_note_tool,
 )
+from brains.mcp.tools import explain_path_tool as exported_explain_path_tool
+from brains.mcp.tools import search_graph_tool as exported_search_graph_tool
 from brains.mcp.server import build_mcp_server
 from brains.sources.pdf.search import search_pdf_corpus
 from brains.sources.vault.related import find_related_note_candidates
@@ -135,6 +139,34 @@ def test_search_vault_tool_delegates_to_rag_layer(monkeypatch) -> None:
     assert payload["kwargs"]["query"] == "pairformer"
 
 
+def test_search_vault_tool_forwards_graph_max_hops(monkeypatch) -> None:
+    monkeypatch.setattr("brains.mcp.tools.search.search_vault_knowledge", lambda **kwargs: {
+        "results": [],
+        "kwargs": kwargs,
+    })
+
+    payload = search_vault_tool(
+        query="how is pairformer related to diffusion",
+        mode="hybrid-graph",
+        graph_max_hops=2,
+    )
+
+    assert payload["kwargs"]["mode"] == "hybrid-graph"
+    assert payload["kwargs"]["graph_max_hops"] == 2
+
+
+def test_search_vault_tool_preserves_default_graph_hops(monkeypatch) -> None:
+    monkeypatch.setattr("brains.mcp.tools.search.search_vault_knowledge", lambda **kwargs: {
+        "results": [],
+        "kwargs": kwargs,
+    })
+
+    payload = search_vault_tool(query="pairformer")
+
+    assert "graph_max_hops" in payload["kwargs"]
+    assert payload["kwargs"]["graph_max_hops"] is None
+
+
 def test_search_pdf_corpus_uses_existing_search_stack(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -173,16 +205,57 @@ def test_search_pdfs_tool_delegates_to_rag_layer(monkeypatch) -> None:
     assert payload["kwargs"]["query"] == "ligand"
 
 
+def test_search_graph_tool_delegates_to_graph_layer(monkeypatch) -> None:
+    monkeypatch.setattr("brains.mcp.tools.search.search_graph_knowledge", lambda **kwargs: {
+        "results": [{"source_path": "EN/Graph.md"}],
+        "kwargs": kwargs,
+    })
+
+    payload = search_graph_tool(query="pairformer", k=3, max_hops=2)
+
+    assert payload["results"][0]["source_path"] == "EN/Graph.md"
+    assert payload["kwargs"]["query"] == "pairformer"
+    assert payload["kwargs"]["max_hops"] == 2
+
+
+def test_explain_path_tool_delegates_to_graph_layer(monkeypatch) -> None:
+    monkeypatch.setattr("brains.mcp.tools.search.explain_graph_path_knowledge", lambda **kwargs: {
+        "path_found": True,
+        "kwargs": kwargs,
+    })
+
+    payload = explain_path_tool(source="Pairformer", target="Diffusion Module", max_hops=2)
+
+    assert payload["path_found"] is True
+    assert payload["kwargs"]["source"] == "Pairformer"
+    assert payload["kwargs"]["target"] == "Diffusion Module"
+    assert payload["kwargs"]["max_hops"] == 2
+
+
 def test_find_related_note_candidates_filters_same_branch_and_self(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "brains.sources.vault.related.search_vault_knowledge",
-        lambda **kwargs: {
+    captured: dict[str, object] = {}
+
+    def fake_search_vault_knowledge(**kwargs):
+        captured["search_kwargs"] = kwargs
+        return {
             "results": [
                 {"source_path": "EN/3. Models/3.7. Boltz-1.md", "language_branch": "EN", "snippet": "self"},
                 {"source_path": "EN/Index.md", "language_branch": "EN", "snippet": "related"},
                 {"source_path": "UA/Індекс.md", "language_branch": "UA", "snippet": "cross-branch"},
             ],
             "warnings": [],
+        }
+
+    monkeypatch.setattr(
+        "brains.sources.vault.related.search_vault_knowledge",
+        fake_search_vault_knowledge,
+    )
+    monkeypatch.setattr(
+        "brains.sources.vault.related.explain_graph_path_knowledge",
+        lambda **kwargs: {
+            "path_found": True,
+            "hops": 1,
+            "summary": ["Boltz-1 --links_to--> Index"],
         },
     )
 
@@ -195,6 +268,41 @@ def test_find_related_note_candidates_filters_same_branch_and_self(monkeypatch) 
     )
 
     assert [row["source_path"] for row in payload["results"]] == ["EN/Index.md"]
+    assert captured["search_kwargs"]["mode"] == "hybrid-graph"
+    assert payload["results"][0]["graph_evidence"] == ["Boltz-1 --links_to--> Index"]
+    assert payload["results"][0]["graph_hops"] == 1
+
+
+def test_find_related_note_candidates_forwards_graph_max_hops(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "brains.sources.vault.related.search_vault_knowledge",
+        lambda **kwargs: {
+            "results": [{"source_path": "EN/Index.md", "language_branch": "EN", "snippet": "related"}],
+            "warnings": [],
+            "kwargs": kwargs,
+        },
+    )
+
+    def fake_explain_graph_path_knowledge(**kwargs):
+        captured["graph_kwargs"] = kwargs
+        return {"path_found": False, "hops": None, "summary": []}
+
+    monkeypatch.setattr(
+        "brains.sources.vault.related.explain_graph_path_knowledge",
+        fake_explain_graph_path_knowledge,
+    )
+
+    find_related_note_candidates(
+        note_path="EN/3. Models/3.7. Boltz-1.md",
+        note_title="Boltz-1",
+        note_content="# Boltz-1\n\nOpen model note.\n",
+        note_branch="EN",
+        graph_max_hops=3,
+    )
+
+    assert captured["graph_kwargs"]["max_hops"] == 3
 
 
 def test_find_related_notes_tool_delegates_to_rag_layer(monkeypatch, tmp_path: Path) -> None:
@@ -209,10 +317,12 @@ def test_find_related_notes_tool_delegates_to_rag_layer(monkeypatch, tmp_path: P
         path="EN/3. Models/3.7. Boltz-1.md",
         repo_root=repo_root,
         k=5,
+        graph_max_hops=2,
     )
 
     assert [row["source_path"] for row in payload["results"]] == ["EN/Index.md"]
     assert payload["kwargs"]["note_path"] == "EN/3. Models/3.7. Boltz-1.md"
+    assert payload["kwargs"]["graph_max_hops"] == 2
 
 
 def test_create_mirror_note_creates_explicit_target(tmp_path: Path) -> None:
@@ -287,12 +397,19 @@ def test_build_mcp_server_registers_stage_two_tools(tmp_path: Path) -> None:
     tool_names = sorted(tool.name for tool in asyncio.run(server.list_tools()))
     assert tool_names == [
         "create_mirror_note",
+        "explain_path",
         "find_related_notes",
         "list_notes",
         "read_note",
         "run_experiment",
+        "search_graph",
         "search_pdfs",
         "search_vault",
         "validate_note",
         "write_note",
     ]
+
+
+def test_mcp_tools_package_exports_graph_tools() -> None:
+    assert exported_search_graph_tool is search_graph_tool
+    assert exported_explain_path_tool is explain_path_tool

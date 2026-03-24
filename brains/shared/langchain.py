@@ -59,6 +59,42 @@ def embed_texts(
     return vectors
 
 
+def embed_texts_with_model_fallback(
+    texts: Sequence[str],
+    *,
+    model: str,
+    fallback_models: Sequence[str],
+    base_url: str,
+    batch_size: int,
+) -> tuple[list[list[float]], str, list[str]]:
+    warnings: list[str] = []
+    last_error: Exception | None = None
+    for candidate in _unique_models([model, *fallback_models]):
+        try:
+            vectors = embed_texts(
+                texts,
+                model=candidate,
+                base_url=base_url,
+                batch_size=batch_size,
+            )
+        except Exception as exc:
+            last_error = exc
+            warnings.append(
+                f"Ollama embeddings failed for '{candidate}' "
+                f"({type(exc).__name__}: {exc})."
+            )
+            continue
+        if candidate != model:
+            warnings.append(
+                f"Embedding stage fell back from '{model}' to '{candidate}'."
+            )
+        return vectors, candidate, warnings
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Embedding request failed without a captured exception.")
+
+
 def _post_json(url: str, payload: dict[str, Any], *, timeout: float = 30.0) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
     req = request.Request(
@@ -116,3 +152,15 @@ def _embed_batch_with_fallback(
                 raise RuntimeError("Ollama /api/embeddings returned no embedding.")
             legacy_vectors.append(list(vector))
         return legacy_vectors
+
+
+def _unique_models(models: Sequence[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for raw_model in models:
+        model = raw_model.strip()
+        if not model or model in seen:
+            continue
+        seen.add(model)
+        ordered.append(model)
+    return ordered

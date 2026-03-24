@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from brains.shared import logger
-from brains.shared.langchain import embed_texts
+from brains.shared.langchain import embed_texts_with_model_fallback
+from brains.shared.ollama import resolve_installed_ollama_model
 from brains.shared.text import chunk_id
 from brains.config.loader import get_config, resolve_repo_path
 from brains.sources.vault.chunking import chunk_markdown_blocks, extract_markdown_blocks
@@ -60,6 +61,7 @@ def write_manifest(
     config: VaultIndexConfig,
     markdown_paths: Sequence[Path],
     *,
+    actual_embed_model: str,
     parser_counts: Counter[str],
     block_count: int,
     block_kind_counts: Counter[str],
@@ -76,7 +78,7 @@ def write_manifest(
         "db_uri": config.paths.db_uri.relative_to(config.paths.brains_root).as_posix()
         if config.paths.db_uri.is_relative_to(config.paths.brains_root)
         else str(config.paths.db_uri),
-        "embed_model": config.embed_model,
+        "embed_model": actual_embed_model,
         "ollama_base_url": config.ollama_base_url,
         "parser": config.parser,
         "chunk_size": config.chunk_size,
@@ -178,13 +180,23 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
     if not chunked_docs:
         raise ValueError("No markdown content could be prepared for indexing.")
 
+    resolved_embed_model = resolve_installed_ollama_model(
+        config.embed_model,
+        base_url=config.ollama_base_url,
+        fallback_models=get_config().ollama.embed_fallback_models,
+        allow_fallback=True,
+    )
+    if resolved_embed_model.warning:
+        warnings.append(resolved_embed_model.warning)
     logger.info("Embedding {} markdown chunks into LanceDB.", len(chunked_docs))
-    vectors = embed_texts(
+    vectors, actual_embed_model, embedding_warnings = embed_texts_with_model_fallback(
         [doc.page_content for doc in chunked_docs],
-        model=config.embed_model,
+        model=resolved_embed_model.resolved,
+        fallback_models=get_config().ollama.embed_fallback_models,
         base_url=config.ollama_base_url,
         batch_size=config.batch_size,
     )
+    warnings.extend(embedding_warnings)
     rows = build_vault_rows(chunked_docs, vectors)
     config.paths.db_uri.mkdir(parents=True, exist_ok=True)
     db = lancedb.connect(str(config.paths.db_uri))
@@ -197,6 +209,7 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
     manifest = write_manifest(
         config,
         markdown_paths,
+        actual_embed_model=actual_embed_model,
         parser_counts=parser_counts,
         block_count=len(block_docs),
         block_kind_counts=block_kind_counts,
@@ -218,7 +231,7 @@ def index_vault(config: VaultIndexConfig) -> dict[str, Any]:
         "chunk_count": len(rows),
         "manifest_path": str(config.paths.manifest_path),
         "db_uri": str(config.paths.db_uri),
-        "embed_model": config.embed_model,
+        "embed_model": actual_embed_model,
         "parser": config.parser,
         "parser_counts": dict(sorted(parser_counts.items())),
         "block_kind_counts": dict(sorted(block_kind_counts.items())),

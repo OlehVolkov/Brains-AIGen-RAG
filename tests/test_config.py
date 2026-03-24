@@ -4,11 +4,14 @@ from pathlib import Path
 
 from brains.config import (
     BrainsPaths,
+    GraphPaths,
     load_config,
+    resolve_graph_paths,
     resolve_pdf_paths,
     resolve_research_paths,
     resolve_vault_paths,
 )
+from brains.sources.graph.models import GraphIndexConfig, GraphSearchConfig
 from brains.sources.pdf.models import IndexConfig, SearchConfig
 from brains.research.models import ResearchRunConfig
 from brains.sources.vault.models import VaultIndexConfig, VaultSearchConfig
@@ -20,8 +23,11 @@ def test_load_config_merges_base_local_and_env(monkeypatch, tmp_path: Path) -> N
     base.write_text(
         """
 [ollama]
-embed_model = "base-embed"
 base_url = "http://base:11434"
+
+[ollama.profiles.embeddings]
+preferred_model = "base-embed"
+fallback_models = ["fallback-a", "fallback-b"]
 
 [pdf]
 pdf_dir = "PDF"
@@ -43,11 +49,12 @@ model = "local-thinker"
         + "\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("BRAINS_OLLAMA__EMBED_MODEL", "env-embed")
+    monkeypatch.setenv("BRAINS_OLLAMA__PROFILES__EMBEDDINGS__PREFERRED_MODEL", "env-embed")
 
     config = load_config(config_path=base, local_config_path=local)
 
     assert config.ollama.embed_model == "env-embed"
+    assert config.ollama.embed_fallback_models == ["fallback-a", "fallback-b"]
     assert config.ollama.base_url == "http://base:11434"
     assert config.pdf.table_name == "base_pdf"
     assert config.vault.table_name == "local_vault"
@@ -76,9 +83,26 @@ def test_resolve_research_paths_uses_default_config_layout() -> None:
     assert paths.memory_path.as_posix().endswith("/.brains/.index/research/memory.jsonl")
 
 
+def test_resolve_graph_paths_uses_default_config_layout() -> None:
+    paths = resolve_graph_paths()
+
+    assert paths.index_root.as_posix().endswith("/.brains/.index/graph_search")
+    assert paths.graph_path.as_posix().endswith("/.brains/.index/graph_search/graph.json")
+
+
+def test_default_config_exposes_graph_and_health_settings() -> None:
+    config = load_config()
+
+    assert "AGENTS.md" in config.graph.governance_files
+    assert ("Home.md", "UA/Головна.md") in config.graph.special_page_pairs
+    assert config.health.pdf_probe_query == "pairformer"
+    assert config.health.vault_probe_query == "pairformer"
+
+
 def test_from_settings_preserves_explicit_zero_values() -> None:
     pdf_paths = resolve_pdf_paths()
     vault_paths = resolve_vault_paths()
+    graph_paths = resolve_graph_paths()
     research_paths = resolve_research_paths()
 
     pdf_config = IndexConfig.from_settings(
@@ -101,6 +125,12 @@ def test_from_settings_preserves_explicit_zero_values() -> None:
         memory_k=0,
         reflection_rounds=0,
     )
+    graph_search_config = GraphSearchConfig.from_settings(
+        paths=graph_paths,
+        query="pairformer",
+        k=0,
+        max_hops=0,
+    )
 
     assert pdf_config.chunk_size == 0
     assert pdf_config.chunk_overlap == 0
@@ -108,10 +138,26 @@ def test_from_settings_preserves_explicit_zero_values() -> None:
     assert vault_config.chunk_size == 0
     assert vault_config.chunk_overlap == 0
     assert vault_config.batch_size == 0
+    assert graph_search_config.k == 0
+    assert graph_search_config.max_hops == 0
     assert research_config.vault_k == 0
     assert research_config.pdf_k == 0
     assert research_config.memory_k == 0
     assert research_config.reflection_rounds == 0
+
+
+def test_graph_index_config_from_settings_preserves_paths(tmp_path: Path) -> None:
+    paths = GraphPaths(
+        repo_root=tmp_path,
+        brains_root=tmp_path / ".brains",
+        index_root=tmp_path / ".brains" / ".index" / "graph_search",
+        graph_path=tmp_path / ".brains" / ".index" / "graph_search" / "graph.json",
+        manifest_path=tmp_path / ".brains" / ".index" / "graph_search" / "manifest.json",
+    )
+
+    config = GraphIndexConfig.from_settings(paths=paths)
+
+    assert config.paths == paths
 
 
 def test_vault_search_config_uses_manifest_embed_model_when_present(tmp_path: Path) -> None:

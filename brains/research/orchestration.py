@@ -4,6 +4,7 @@ import re
 from datetime import UTC, datetime
 
 from brains.shared import logger, snippet
+from brains.sources.graph.search import explain_graph_path_knowledge, search_graph_knowledge
 from brains.sources.pdf.search import search_pdf_corpus
 from brains.research.memory import MemoryStore
 from brains.research.models import ResearchRunConfig
@@ -24,12 +25,15 @@ def _context_to_text(
     query: str,
     *,
     vault_results: list[dict],
+    graph_results: list[dict],
+    graph_paths: list[dict],
     pdf_results: list[dict],
     memory_results: list[dict],
 ) -> str:
     lines = [f"Query: {query}", ""]
     for label, rows in (
         ("Vault context", vault_results),
+        ("Graph context", graph_results),
         ("PDF context", pdf_results),
         ("Memory context", memory_results),
     ):
@@ -43,7 +47,61 @@ def _context_to_text(
             rendered = row.get("snippet") or row.get("summary") or ""
             lines.append(f"- {source_path}: {rendered}")
         lines.append("")
+    lines.append("Graph paths:")
+    if not graph_paths:
+        lines.append("- none")
+    else:
+        for payload in graph_paths:
+            lines.append(
+                "- "
+                f"{payload.get('resolved_source_path')} -> {payload.get('resolved_target_path')} "
+                f"(hops={payload.get('hops')})"
+            )
+            for step in payload.get("summary", [])[:3]:
+                lines.append(f"  {step}")
+    lines.append("")
     return "\n".join(lines).strip()
+
+
+def _distinct_source_paths(rows: list[dict], *, limit: int) -> list[str]:
+    paths: list[str] = []
+    for row in rows:
+        source_path = str(row.get("source_path", ""))
+        if not source_path or source_path in paths:
+            continue
+        paths.append(source_path)
+        if len(paths) >= limit:
+            break
+    return paths
+
+
+def _collect_graph_paths(vault_results: list[dict], *, limit: int = 2) -> tuple[list[dict], list[str]]:
+    warnings: list[str] = []
+    seed_paths = _distinct_source_paths(vault_results, limit=4)
+    if len(seed_paths) < 2:
+        return [], warnings
+
+    explanations: list[dict] = []
+    for index, left in enumerate(seed_paths):
+        for right in seed_paths[index + 1 :]:
+            try:
+                payload = explain_graph_path_knowledge(
+                    source=left,
+                    target=right,
+                    max_hops=2,
+                )
+            except FileNotFoundError:
+                warnings.append("Graph artifacts not found; skipping graph path context.")
+                return explanations, warnings
+            except Exception as exc:
+                warnings.append(f"graph path context unavailable ({type(exc).__name__}: {exc}).")
+                return explanations, warnings
+
+            if payload.get("path_found"):
+                explanations.append(payload)
+            if len(explanations) >= limit:
+                return explanations, warnings
+    return explanations, warnings
 
 
 def _heuristic_role_output(role: str, query: str, context_text: str) -> str:
@@ -192,6 +250,19 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         logger.warning("Vault retrieval unavailable inside research loop.")
         warnings.append(f"vault retrieval unavailable ({type(exc).__name__}: {exc}).")
 
+    graph_results: list[dict] = []
+    try:
+        graph_payload = search_graph_knowledge(
+            query=config.query,
+            k=max(1, min(config.vault_k, 4)),
+            max_hops=1,
+        )
+        graph_results = graph_payload.get("results", [])
+        warnings.extend(graph_payload.get("warnings", []))
+    except Exception as exc:
+        logger.warning("Graph retrieval unavailable inside research loop.")
+        warnings.append(f"graph retrieval unavailable ({type(exc).__name__}: {exc}).")
+
     pdf_results: list[dict] = []
     try:
         pdf_payload = search_pdf_corpus(
@@ -208,9 +279,14 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         logger.warning("PDF retrieval unavailable inside research loop.")
         warnings.append(f"pdf retrieval unavailable ({type(exc).__name__}: {exc}).")
 
+    graph_paths, graph_path_warnings = _collect_graph_paths(vault_results)
+    warnings.extend(graph_path_warnings)
+
     context_text = _context_to_text(
         config.query,
         vault_results=vault_results,
+        graph_results=graph_results,
+        graph_paths=graph_paths,
         pdf_results=pdf_results,
         memory_results=memory_results,
     )
@@ -261,6 +337,8 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         "model": config.model,
         "warnings": warnings,
         "vault_results": vault_results,
+        "graph_results": graph_results,
+        "graph_paths": graph_paths,
         "pdf_results": pdf_results,
         "memory_results": memory_results,
         "roles": roles,

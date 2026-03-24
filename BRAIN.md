@@ -48,6 +48,8 @@ Primary interface:
 
 - `search_vault`
 - `search_pdfs`
+- `search_graph`
+- `explain_path`
 - `find_related_notes`
 - `read_note`
 - `write_note`
@@ -59,9 +61,12 @@ Primary interface:
 Secondary interface when MCP is unavailable and the agent is operating inside the repository:
 
 - `brains search-vault`
+- `brains search-graph`
+- `brains explain-path`
 - `brains search`
 - `brains think`
 - `brains index-vault`
+- `brains index-graph`
 - `brains index`
 - `brains check-index`
 
@@ -82,9 +87,16 @@ Use MCP as the canonical contract for repository-grounded operations.
 - `search_vault`
   - use for markdown notes and knowledge-base content
   - prefer this before manually scanning many files
+  - use `mode=hybrid-graph` when the query is about relationships, paths, or how notes connect
 - `search_pdfs`
   - use for indexed PDF content under the local PDF corpus
   - use this before making claims about paper contents
+- `search_graph`
+  - use when you need repository-relationship evidence instead of semantic similarity only
+  - prefer it for note-to-note navigation, mirror checks, and structural neighborhood lookup
+- `explain_path`
+  - use when you need an explicit graph path between two notes or note-like queries
+  - prefer it for explainability, related-note evidence, and path-style questions
 
 ### Note Operations
 
@@ -107,6 +119,7 @@ Use MCP as the canonical contract for repository-grounded operations.
 - `run_experiment`
   - use for multi-step reasoning, idea generation, experiment planning, or report-style outputs
   - use after retrieval, not instead of retrieval
+  - expect it to include vault, graph, PDF, and memory context when available
 
 ## Retrieval Rules
 
@@ -143,9 +156,12 @@ When modifying this tooling:
 This repository uses local indexes for vault and PDF retrieval.
 
 - markdown index artifacts belong under `/.brains/.index/vault_search`
+- repository graph artifacts belong under `/.brains/.index/graph_search`
 - PDF index artifacts belong under `/.brains/.index/pdf_search`
 - research memory and sessions belong under `/.brains/.index/research`
 - prefer `brains index-vault --parser auto` for the canonical vault index
+- use `brains index-graph` for the note-centric repository graph built from sections, wiki-links, mirrors, tags, and DOI references
+- expect the graph index to also contain a lightweight heuristic entity layer derived from mirrored note titles and note mentions
 - treat full `brains index-vault --parser docling` runs as verification/comparison runs unless the task explicitly needs a docling-only canonical index
 - keep experimental comparison roots under `/.brains/.index/...`; do not leave repository-root `/.index` directories behind
 
@@ -170,8 +186,14 @@ Judge retrieval quality by relevance, not only by successful execution:
 - watch for frontmatter leakage such as `cssclasses` or `tags`;
 - watch for code-block-heavy false positives;
 - inspect whether section paths and snippets are useful for the query.
+- when using `search-graph`, confirm that top hits are explainable through concrete note relationships rather than only broad domain expansion.
+- when entity-driven graph hits appear, confirm that they are anchored in meaningful note-title entities rather than generic navigation pages.
+- when using `search-vault --mode hybrid-graph`, confirm that graph-expanded notes improve coverage without displacing the best seed hits.
 - prefer the active index manifest's `embed_model` for query embeddings unless a task explicitly overrides it; vault and PDF indexes may legitimately use different embedding models.
 - if Ollama embedding calls fail with transient `HTTP 500`-style errors during indexing, retry before treating the corpus or index as broken.
+- for large indexing jobs, prefer a model ladder rather than a single hard requirement: `bge-m3` first, then `bge-large`, then `nomic-embed-text` as a pragmatic fallback if the stronger models fail or are absent.
+- keep lightweight embedding intents separate from the canonical manifest model: `e5-small` / `bge-small` are allowed targets, but if they are unavailable locally the workflow should degrade to a smaller installed embedding model instead of aborting.
+- treat `BAAI/bge-reranker-large` as the practical high-quality reranker in `brains`; local Ollama reranker-family models are tracked for availability, but this repository should not assume an Ollama native rerank endpoint exists.
 - avoid assuming quoted phrase queries will work on every active FTS index; if phrase search is important, verify it explicitly for the current index first.
 
 If an index health check reports a timeout under sandboxed or WSL-mounted environments, do not assume corruption immediately. Re-run the validation in a less restricted environment first.
@@ -203,6 +225,45 @@ Keep lint, typing, and tests separate:
 - `uv run ruff check brains tests`
 - `uv run mypy brains`
 - targeted `uv run pytest ...`
+
+Before large reindex or retrieval tuning work, check local Ollama model availability with:
+
+```bash
+python3 .brains/scripts/check_ollama_models.py --json-output
+```
+
+If the required model family is absent, bootstrap it with:
+
+```bash
+python3 .brains/scripts/ensure_ollama_models.py --json-output
+```
+
+Those helpers are intentionally standalone and should keep working even when the `/.brains` environment itself is not fully initialized.
+
+For the standard literature-download workflow, use:
+
+```bash
+python3 .brains/scripts/fetch_literature_pdfs.py
+```
+
+Pass through any extra `fetch-pdfs` flags after it. This Python wrapper is the canonical reusable entrypoint for `brains fetch-pdfs --reindex` and should remain portable by resolving `uv` from `PATH` or `UV_BIN`.
+
+Configuration notes:
+
+- keep repository-specific governance filtering in `[graph].governance_files`
+- keep explicit mirror exceptions in `[graph].special_page_pairs`
+- keep default health-check probes in `[health].pdf_probe_query` and `[health].vault_probe_query`
+- keep the Ollama helper scripts TOML-driven; do not reintroduce fallback inline configs inside the scripts
+- when adapting `brains` to another repository, prefer changing those TOML sections first instead of patching Python constants
+
+Typing guidance for this repository:
+
+- treat `uv run mypy brains` as the canonical type-check command
+- keep the checked-in mypy configuration runnable without extra ad hoc flags during normal verification
+- keep `follow_imports = "skip"` as the default policy unless a later verified change proves full import following is stable here
+- heavy optional dependency trees such as `docling`, `sentence-transformers`, `transformers`, and `torch` are the main reason to avoid full import traversal by default
+- if mypy appears to hang, diagnose import traversal before assuming a local typing regression
+- prefer the reusable helper script `/.brains/scripts/diagnose_mypy_hang.py` for mypy-hang diagnosis
 
 ## Typical External-Agent Playbooks
 

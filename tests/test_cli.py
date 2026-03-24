@@ -6,11 +6,12 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from brains import cli
+from brains.commands import graph as graph_commands
 from brains.commands import health as health_commands
 from brains.commands import pdf as pdf_commands
 from brains.commands import research as research_commands
 from brains.commands import vault as vault_commands
-from brains.config import BrainsPaths, ResearchPaths
+from brains.config import BrainsPaths, GraphPaths, ResearchPaths
 
 
 def make_dummy_paths() -> BrainsPaths:
@@ -28,15 +29,31 @@ def make_dummy_paths() -> BrainsPaths:
     )
 
 
+def make_dummy_graph_paths() -> GraphPaths:
+    repo_root = Path("/tmp/repo")
+    brains_root = repo_root / ".brains"
+    index_root = brains_root / ".index" / "graph_search"
+    return GraphPaths(
+        repo_root=repo_root,
+        brains_root=brains_root,
+        index_root=index_root,
+        graph_path=index_root / "graph.json",
+        manifest_path=index_root / "manifest.json",
+    )
+
+
 def test_main_help_shows_commands() -> None:
     runner = CliRunner()
     result = runner.invoke(cli.main, ["--help"])
     assert result.exit_code == 0
     assert "index" in result.output
+    assert "index-graph" in result.output
     assert "check-index" in result.output
     assert "fetch-pdfs" in result.output
     assert "mcp" in result.output
     assert "search" in result.output
+    assert "explain-path" in result.output
+    assert "search-graph" in result.output
     assert "think" in result.output
     assert "index-vault" in result.output
     assert "search-vault" in result.output
@@ -266,6 +283,142 @@ def test_index_vault_command_forwards_parser(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert captured["config"].parser == "auto"
+
+
+def test_index_graph_command_json_output(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_graph_paths(**kwargs):
+        captured["resolve_kwargs"] = kwargs
+        return make_dummy_graph_paths()
+
+    def fake_index_graph(config):
+        captured["config"] = config
+        return {
+            "node_count": 10,
+            "edge_count": 12,
+            "graph_path": str(config.paths.graph_path),
+        }
+
+    monkeypatch.setattr(graph_commands, "resolve_graph_paths", fake_resolve_graph_paths)
+    monkeypatch.setattr(graph_commands, "index_graph", fake_index_graph)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["index-graph", "--json-output"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["node_count"] == 10
+    assert captured["resolve_kwargs"] == {"index_root": None, "graph_file": None}
+
+
+def test_search_graph_command_text_output(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_graph_paths(**kwargs):
+        captured["resolve_kwargs"] = kwargs
+        return make_dummy_graph_paths()
+
+    def fake_search_graph(config):
+        captured["config"] = config
+        return {
+            "results": [
+                {
+                    "rank": 1,
+                    "source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+                    "language_branch": "EN",
+                    "score": 9.5,
+                    "snippet": "Pairformer | tags: architecture, pairformer",
+                    "evidence": ["matched note `EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md`"],
+                }
+            ],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(graph_commands, "resolve_graph_paths", fake_resolve_graph_paths)
+    monkeypatch.setattr(graph_commands, "search_graph", fake_search_graph)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["search-graph", "pairformer", "--max-hops", "2"])
+
+    assert result.exit_code == 0
+    assert "Pairformer.md" in result.output
+    assert "matched note" in result.output
+    assert captured["resolve_kwargs"] == {"index_root": None, "graph_file": None}
+    assert captured["config"].query == "pairformer"
+    assert captured["config"].max_hops == 2
+
+
+def test_explain_path_command_text_output(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_graph_paths(**kwargs):
+        captured["resolve_kwargs"] = kwargs
+        return make_dummy_graph_paths()
+
+    def fake_explain_graph_path(config):
+        captured["config"] = config
+        return {
+            "path_found": True,
+            "resolved_source_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.2. Pairformer.md",
+            "resolved_target_path": "EN/1. AlphaFold3/1.2. Architecture/1.2.3. Diffusion Module.md",
+            "hops": 1,
+            "total_weight": 1.0,
+            "summary": ["Pairformer --links_to--> Diffusion Module"],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(graph_commands, "resolve_graph_paths", fake_resolve_graph_paths)
+    monkeypatch.setattr(graph_commands, "explain_graph_path", fake_explain_graph_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["explain-path", "Pairformer", "Diffusion Module", "--max-hops", "2"],
+    )
+
+    assert result.exit_code == 0
+    assert "Pairformer --links_to--> Diffusion Module" in result.output
+    assert captured["resolve_kwargs"] == {"index_root": None, "graph_file": None}
+    assert captured["config"].source == "Pairformer"
+    assert captured["config"].target == "Diffusion Module"
+    assert captured["config"].max_hops == 2
+
+
+def test_search_vault_command_forwards_hybrid_graph_options(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_resolve_vault_paths(**kwargs):
+        return make_dummy_paths()
+
+    def fake_search_vault(config):
+        captured["config"] = config
+        return {
+            "results": [],
+            "warnings": [],
+            "effective_mode": "hybrid-graph",
+            "effective_reranker": "rrf",
+        }
+
+    monkeypatch.setattr(vault_commands, "resolve_vault_paths", fake_resolve_vault_paths)
+    monkeypatch.setattr(vault_commands, "search_vault", fake_search_vault)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "search-vault",
+            "how is pairformer related to diffusion",
+            "--mode",
+            "hybrid-graph",
+            "--graph-max-hops",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["config"].mode == "hybrid-graph"
+    assert captured["config"].graph_max_hops == 2
 
 
 def test_mcp_command_starts_server(monkeypatch) -> None:

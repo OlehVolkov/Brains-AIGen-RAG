@@ -32,6 +32,7 @@ def extract_pdf_blocks(documents: Sequence[Document]) -> tuple[list[Document], l
     in_references = False
     references_skipped = 0
     block_index = 0
+    first_page = int(documents[0].metadata.get("page", 0))
 
     for page_doc in documents:
         page = int(page_doc.metadata.get("page", 0))
@@ -67,6 +68,21 @@ def extract_pdf_blocks(documents: Sequence[Document]) -> tuple[list[Document], l
 
             if in_references:
                 references_skipped += 1
+                line_index += 1
+                continue
+
+            if (
+                page == first_page
+                and not blocks
+                and not section_stack
+                and not paragraph_lines
+                and _is_leading_preamble_line(
+                    stripped,
+                    title=title,
+                    authors=authors,
+                    year=year,
+                )
+            ):
                 line_index += 1
                 continue
 
@@ -292,6 +308,15 @@ def _update_section_stack(section_stack: list[dict[str, Any]], title: str, level
 
 
 def _parse_heading(line: str) -> tuple[str, int] | None:
+    explicit_heading = _parse_explicit_heading(line)
+    if explicit_heading is not None:
+        return explicit_heading
+    if _looks_like_heading(line):
+        return normalize_text(line), 1
+    return None
+
+
+def _parse_explicit_heading(line: str) -> tuple[str, int] | None:
     markdown_match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
     if markdown_match:
         return normalize_text(markdown_match.group(2)), len(markdown_match.group(1))
@@ -306,8 +331,6 @@ def _parse_heading(line: str) -> tuple[str, int] | None:
         return normalize_text(line), 1
     if lowered == "abstract":
         return "Abstract", 1
-    if _looks_like_heading(line):
-        return normalize_text(line), 1
     return None
 
 
@@ -355,7 +378,7 @@ def _looks_like_formula(text: str) -> bool:
 def _infer_title(documents: Sequence[Document]) -> str:
     first_page_lines = _nonempty_lines(documents[0].page_content)
     for line in first_page_lines[:8]:
-        if _parse_heading(line) is not None:
+        if _parse_explicit_heading(line) is not None:
             continue
         if len(line) > 160:
             continue
@@ -375,7 +398,7 @@ def _infer_authors(documents: Sequence[Document], *, title: str) -> list[str]:
     candidate_lines = first_page_lines[title_index + 1 : title_index + 4]
     authors: list[str] = []
     for line in candidate_lines:
-        if _parse_heading(line) is not None:
+        if _parse_explicit_heading(line) is not None:
             break
         if any(char.isdigit() for char in line):
             continue
@@ -398,6 +421,35 @@ def _infer_year(documents: Sequence[Document]) -> int | None:
     if match:
         return int(match.group(0))
     return None
+
+
+def _is_leading_preamble_line(
+    line: str,
+    *,
+    title: str,
+    authors: Sequence[str],
+    year: int | None,
+) -> bool:
+    normalized = normalize_text(line)
+    if not normalized:
+        return False
+    if normalized == title:
+        return True
+
+    if authors:
+        author_candidates = {
+            ", ".join(authors),
+            " and ".join(authors),
+            " , ".join(authors),
+        }
+        if normalized in author_candidates:
+            return True
+
+    if year is not None and re.search(rf"\b{year}\b", normalized):
+        if len(normalized.split()) <= 8:
+            return True
+
+    return False
 
 
 def _current_section_name(section_stack: Sequence[dict[str, Any]]) -> str:
