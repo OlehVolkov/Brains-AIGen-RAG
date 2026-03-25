@@ -367,7 +367,8 @@ def test_run_experiment_writes_artifact(monkeypatch, tmp_path: Path) -> None:
     def fake_run_think_loop(config):
         return {
             "session_id": config.session_id,
-            "final_answer": "experiment result",
+            "summary": "experiment result",
+            "agent_handoff": "handoff",
             "warnings": [],
         }
 
@@ -387,7 +388,8 @@ def test_run_experiment_writes_artifact(monkeypatch, tmp_path: Path) -> None:
     assert artifact_path.exists()
     saved = json.loads(artifact_path.read_text(encoding="utf-8"))
     assert saved["name"] == "Boltz benchmark"
-    assert saved["result"]["final_answer"] == "experiment result"
+    assert saved["result"]["summary"] == "experiment result"
+    assert payload["summary"] == "experiment result"
 
 
 def test_build_mcp_server_registers_stage_two_tools(tmp_path: Path) -> None:

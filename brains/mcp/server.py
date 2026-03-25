@@ -239,7 +239,7 @@ def build_mcp_server(
 
     @server.tool(
         name="run_experiment",
-        description="Run a reproducible local research experiment using the think loop and save an artifact.",
+        description="Build a reproducible retrieval bundle for an external agent and save an artifact.",
     )
     def run_experiment(
         name: str,
@@ -248,7 +248,6 @@ def build_mcp_server(
         save_memory: bool = True,
         vault_k: int | None = None,
         pdf_k: int | None = None,
-        reflection_rounds: int | None = None,
     ) -> dict[str, object]:
         return run_experiment_tool(
             name=name,
@@ -257,7 +256,6 @@ def build_mcp_server(
             save_memory=save_memory,
             vault_k=vault_k,
             pdf_k=pdf_k,
-            reflection_rounds=reflection_rounds,
             repo_root=active_repo_root,
         )
 

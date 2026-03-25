@@ -51,21 +51,9 @@ def format_think_report(payload: dict) -> str:
     lines.append("")
     lines.extend(_render_hits("### Memory", payload.get("memory_results", [])))
     lines.append("")
-
-    for role_name in ("researcher", "coder", "reviewer"):
-        role_payload = payload["roles"].get(role_name, {})
-        lines.append(f"## {role_name.title()}")
-        lines.append(role_payload.get("content", ""))
-        lines.append("")
-
-    reflections = payload.get("reflections", [])
-    if reflections:
-        lines.append("## Reflections")
-        for index, reflection in enumerate(reflections, start=1):
-            lines.append(f"### Reflection {index}")
-            lines.append(reflection)
-            lines.append("")
-
-    lines.append("## Final Answer")
-    lines.append(payload.get("final_answer", ""))
+    lines.append("## Summary")
+    lines.append(payload.get("summary", payload.get("final_answer", "")))
+    lines.append("")
+    lines.append("## Agent Handoff")
+    lines.append(payload.get("agent_handoff", ""))
     return "\n".join(lines).rstrip()

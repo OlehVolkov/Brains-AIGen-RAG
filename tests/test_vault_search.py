@@ -174,7 +174,7 @@ def test_chunk_markdown_blocks_preserves_formula_and_table_context() -> None:
 
 
 def test_chunk_markdown_blocks_splits_oversized_code_block() -> None:
-    code_lines = "\n".join(f"print({index})" for index in range(80))
+    code_lines = "\n".join(f"print({index})" for index in range(30))
     blocks, _warnings = extract_markdown_blocks(
         [
             Document(

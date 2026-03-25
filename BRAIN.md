@@ -117,9 +117,13 @@ Use MCP as the canonical contract for repository-grounded operations.
 ### Research Synthesis
 
 - `run_experiment`
-  - use for multi-step reasoning, idea generation, experiment planning, or report-style outputs
+  - use for reproducible retrieval bundles that an external agent will synthesize
   - use after retrieval, not instead of retrieval
-  - expect it to include vault, graph, PDF, and memory context when available
+  - expect it to include vault, graph, PDF, memory context, and agent handoff text when available
+- `brains think`
+  - use for the same retrieval-bundle workflow from the local CLI
+  - do not treat it as a local LLM synthesis stage
+  - do not reintroduce a local Ollama chat model as the default backend for this workflow
 
 ## Retrieval Rules
 
@@ -219,12 +223,43 @@ Use:
 - `uv venv` for environment creation
 - `uvx` for one-off external Python CLIs
 - `npx` for one-off Node-based CLIs
+- when Node/npm tooling matters for local workflow compatibility, prefer invoking `npm` and `npx` through Windows `cmd.exe`
+
+Environment invariants for this repository:
+
+- `.venv` is the single canonical local environment and it must be the Windows layout with `.venv/Scripts/python.exe`
+- when operating from `WSL`, create, recreate, sync, and verify that environment through `cmd.exe`, not through `.venv/bin/python`
+- if `.venv/bin/`, `.venv/lib/`, or `.venv/lib64/` appear, treat that as a broken environment and repair it before running local checks or indexing
+- distinguish the actual Node runtime before documenting markdownlint behavior:
+  - current `WSL`-side `node` is `v18.19.1`
+  - current Windows-side `node` via `cmd.exe` is `v20.20.2`, and that Windows runtime is the canonical local runtime for this repository
+- current checked markdownlint path:
+  - Windows-side `cmd.exe /c "npx --yes markdownlint-cli ..."` is working and should be treated as the normal path
+- recovery note:
+  - do not launch multiple Windows-side `npx` installs in parallel against the same shared cache
+  - if `%LocalAppData%\\npm-cache\\_npx` starts producing `TAR_ENTRY_ERROR`, `EPERM`, or `MODULE_NOT_FOUND`, clear that `_npx` directory and rerun the command once, sequentially
+
+If the canonical `.venv` becomes inconsistent, recover it in this order:
+
+1. stop Windows processes still holding `.venv/Scripts/python.exe`
+2. remove `.venv`
+3. recreate it with `cmd.exe /c "cd /d %CD% && uv venv .venv --python 3.12"`
+4. resync it with `cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv sync --all-groups --python 3.12"`
+5. verify it with `cmd.exe /c "cd /d %CD% && .venv\\Scripts\\python.exe -V"`
 
 Keep lint, typing, and tests separate:
 
 - `uv run ruff check brains tests`
 - `uv run mypy brains`
 - targeted `uv run pytest ...`
+- the checked-in pytest config already reports the slowest tests and enables a faulthandler timeout for the full suite
+- when a full run is needed, use `uv run pytest tests -q` as-is before adding extra diagnostic flags
+
+PyTorch/CUDA guidance for this repository:
+
+- the Windows `/.venv` is pinned to PyTorch `cu128` wheels through `pyproject.toml`
+- do not remove that explicit index/source mapping unless you have verified that `uv sync` still preserves a working GPU build
+- after changing Python dependencies or rebuilding the environment, verify GPU status with a direct `torch.cuda.is_available()` check
 
 Before large reindex or retrieval tuning work, check local Ollama model availability with:
 

@@ -18,6 +18,8 @@ dependencies = [
     "pymupdf>=1.27.2",
     "rich>=14.1.0",
     "sentence-transformers>=5.3.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
     "typer>=0.20,<0.22.0",
 ]
 
@@ -61,6 +63,23 @@ strict = true
 python_version = "3.12"
 follow_imports = "skip"
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --durations=10"
+faulthandler_timeout = 45
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+]
+torchvision = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [[tool.mypy.overrides]]
 module = [

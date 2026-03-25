@@ -78,11 +78,56 @@ def _probe_index_worker(
         )
 
 
+def _run_probe_attempt(
+    *,
+    db_uri: Path,
+    table_name: str,
+    probe_query: str | None,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    process = ctx.Process(
+        target=_probe_index_worker,
+        kwargs={
+            "queue": queue,
+            "db_uri": str(db_uri),
+            "table_name": table_name,
+            "probe_query": probe_query,
+        },
+    )
+
+    started_at = monotonic()
+    process.start()
+    process.join(timeout_seconds)
+    elapsed_seconds = round(monotonic() - started_at, 3)
+
+    if process.is_alive():
+        process.terminate()
+        process.join(2)
+        return {
+            "status": "timeout",
+            "elapsed_seconds": elapsed_seconds,
+        }
+
+    try:
+        child_payload = queue.get_nowait()
+    except Empty:
+        child_payload = {
+            "status": "error",
+            "error": "The health-check worker exited without returning a result.",
+            "exit_code": process.exitcode,
+        }
+    child_payload["elapsed_seconds"] = elapsed_seconds
+    return child_payload
+
+
 def check_index_health(
     paths: BrainsPaths,
     *,
     probe_query: str | None = None,
     timeout_seconds: int = 10,
+    retry_on_timeout: int = 1,
 ) -> dict[str, Any]:
     effective_paths, pointer_path = resolve_active_index_paths(paths)
     table_path = effective_paths.db_uri / f"{effective_paths.table_name}.lance"
@@ -97,6 +142,7 @@ def check_index_health(
         "pointer_used": pointer_path is not None,
         "probe_query": probe_query,
         "timeout_seconds": timeout_seconds,
+        "retry_on_timeout": retry_on_timeout,
         "artifacts": {
             "db_uri_exists": effective_paths.db_uri.exists(),
             "manifest_exists": effective_paths.manifest_path.exists(),
@@ -109,27 +155,26 @@ def check_index_health(
         payload["error"] = "Index artifacts are missing on disk."
         return payload
 
-    ctx = multiprocessing.get_context("spawn")
-    queue = ctx.Queue()
-    process = ctx.Process(
-        target=_probe_index_worker,
-        kwargs={
-            "queue": queue,
-            "db_uri": str(effective_paths.db_uri),
-            "table_name": effective_paths.table_name,
-            "probe_query": probe_query,
-        },
-    )
-
-    started_at = monotonic()
-    process.start()
-    process.join(timeout_seconds)
-    payload["elapsed_seconds"] = round(monotonic() - started_at, 3)
-
-    if process.is_alive():
-        process.terminate()
-        process.join(2)
+    attempts: list[dict[str, Any]] = []
+    max_attempts = retry_on_timeout + 1
+    for attempt_index in range(max_attempts):
+        attempt_payload = _run_probe_attempt(
+            db_uri=effective_paths.db_uri,
+            table_name=effective_paths.table_name,
+            probe_query=probe_query,
+            timeout_seconds=timeout_seconds,
+        )
+        attempts.append(attempt_payload)
+        if attempt_payload["status"] != "timeout":
+            payload.update(attempt_payload)
+            payload["attempts"] = len(attempts)
+            payload["retried_after_timeout"] = len(attempts) > 1
+            break
+    else:
         payload["status"] = "timeout"
+        payload["elapsed_seconds"] = attempts[-1]["elapsed_seconds"] if attempts else None
+        payload["attempts"] = len(attempts)
+        payload["retried_after_timeout"] = len(attempts) > 1
         payload["error"] = (
             "Timed out while opening or querying the LanceDB table. "
             "Under WSL or restricted sandbox environments, this often indicates a runtime "
@@ -139,16 +184,4 @@ def check_index_health(
             "Retry the health-check outside the sandbox. If the repository is on /mnt/c, "
             "keep the active index under a Linux-native path such as /tmp."
         )
-        return payload
-
-    try:
-        child_payload = queue.get_nowait()
-    except Empty:
-        child_payload = {
-            "status": "error",
-            "error": "The health-check worker exited without returning a result.",
-            "exit_code": process.exitcode,
-        }
-
-    payload.update(child_payload)
     return payload

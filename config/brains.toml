@@ -71,8 +71,6 @@ vault_probe_query = "pairformer"
 
 [research]
 index_root = ".brains/.index/research"
-model = "llama3.2:3b"
 vault_k = 5
 pdf_k = 5
 memory_k = 3
-reflection_rounds = 1

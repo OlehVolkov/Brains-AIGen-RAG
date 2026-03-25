@@ -153,11 +153,9 @@ class ResearchConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     index_root: str = ".brains/.index/research"
-    model: str = "llama3.2:3b"
     vault_k: int = 5
     pdf_k: int = 5
     memory_k: int = 3
-    reflection_rounds: int = 1
 
 
 class BrainsConfig(BaseSettings):

@@ -42,9 +42,6 @@ table_name = "base_pdf"
 [vault]
 table_name = "local_vault"
 index_root = ".brains/.index/custom_vault"
-
-[research]
-model = "local-thinker"
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -58,7 +55,6 @@ model = "local-thinker"
     assert config.ollama.base_url == "http://base:11434"
     assert config.pdf.table_name == "base_pdf"
     assert config.vault.table_name == "local_vault"
-    assert config.research.model == "local-thinker"
 
 
 def test_resolve_pdf_paths_uses_default_config_layout() -> None:
@@ -123,7 +119,6 @@ def test_from_settings_preserves_explicit_zero_values() -> None:
         vault_k=0,
         pdf_k=0,
         memory_k=0,
-        reflection_rounds=0,
     )
     graph_search_config = GraphSearchConfig.from_settings(
         paths=graph_paths,
@@ -143,7 +138,6 @@ def test_from_settings_preserves_explicit_zero_values() -> None:
     assert research_config.vault_k == 0
     assert research_config.pdf_k == 0
     assert research_config.memory_k == 0
-    assert research_config.reflection_rounds == 0
 
 
 def test_graph_index_config_from_settings_preserves_paths(tmp_path: Path) -> None:

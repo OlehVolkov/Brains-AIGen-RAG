@@ -3,11 +3,11 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
+from brains.research.memory import MemoryStore
+from brains.research.models import ResearchRunConfig
 from brains.shared import logger, snippet
 from brains.sources.graph.search import explain_graph_path_knowledge, search_graph_knowledge
 from brains.sources.pdf.search import search_pdf_corpus
-from brains.research.memory import MemoryStore
-from brains.research.models import ResearchRunConfig
 from brains.sources.vault.search import search_vault_knowledge
 
 
@@ -104,131 +104,36 @@ def _collect_graph_paths(vault_results: list[dict], *, limit: int = 2) -> tuple[
     return explanations, warnings
 
 
-def _heuristic_role_output(role: str, query: str, context_text: str) -> str:
-    preview = snippet(context_text, 700)
-    if role == "researcher":
-        return (
-            f"Research focus for '{query}':\n"
-            "- summarize the strongest retrieved evidence\n"
-            "- identify gaps, assumptions, and adjacent concepts\n"
-            "- keep attention on repository-grounded facts\n\n"
-            f"Context preview:\n{preview}"
-        )
-    if role == "coder":
-        return (
-            f"Implementation view for '{query}':\n"
-            "- translate findings into concrete scripts, note updates, or indexing steps\n"
-            "- prefer small modular changes in `/.brains`\n"
-            "- keep outputs reproducible and index-safe\n\n"
-            f"Context preview:\n{preview}"
-        )
+def _make_bundle_summary(
+    query: str,
+    *,
+    vault_results: list[dict],
+    graph_results: list[dict],
+    graph_paths: list[dict],
+    pdf_results: list[dict],
+    memory_results: list[dict],
+) -> str:
     return (
-        f"Review view for '{query}':\n"
-        "- challenge weak assumptions and unsupported jumps\n"
-        "- flag missing sources, missing mirrors, or indexing gaps\n"
-        "- suggest the next verification step\n\n"
-        f"Context preview:\n{preview}"
+        f"Prepared external-agent retrieval bundle for '{query}' "
+        f"(vault={len(vault_results)}, graph={len(graph_results)}, "
+        f"graph_paths={len(graph_paths)}, pdf={len(pdf_results)}, memory={len(memory_results)})."
     )
 
 
-def _call_ollama(prompt: str, *, model: str, base_url: str) -> str:
-    from langchain_ollama import ChatOllama
-
-    llm = ChatOllama(
-        model=model,
-        base_url=base_url,
-        temperature=0,
-        validate_model_on_init=False,
+def _make_agent_handoff(query: str, context_text: str) -> str:
+    preview = snippet(context_text, 2400)
+    return (
+        "External agent handoff:\n"
+        f"- query: {query}\n"
+        "- use the retrieved vault, graph, PDF, and memory context below\n"
+        "- perform the final synthesis outside `/.brains`\n"
+        "- keep conclusions grounded in the retrieved repository evidence\n\n"
+        f"{preview}"
     )
-    response = llm.invoke(prompt)
-    return response.content if isinstance(response.content, str) else str(response.content)
-
-
-def _run_role(
-    role: str,
-    query: str,
-    context_text: str,
-    *,
-    model: str,
-    base_url: str,
-) -> tuple[str, str | None]:
-    prompt = (
-        f"You are the {role} agent in a local research loop.\n"
-        "Work only with the provided repository-grounded context.\n"
-        "Be concise, structured, and avoid invented facts.\n\n"
-        f"{context_text}\n\n"
-        f"Task: produce the {role} contribution for the query '{query}'."
-    )
-    try:
-        return _call_ollama(prompt, model=model, base_url=base_url), None
-    except Exception as exc:
-        return _heuristic_role_output(role, query, context_text), (
-            f"{role} agent fell back to heuristic mode ({type(exc).__name__}: {exc})."
-        )
-
-
-def _run_reflection(
-    query: str,
-    context_text: str,
-    reviewer_output: str,
-    *,
-    model: str,
-    base_url: str,
-) -> tuple[str, str | None]:
-    prompt = (
-        "You are the self-reflection step in a local research loop.\n"
-        "Read the context and the reviewer critique.\n"
-        "Return a short revision note with missing checks, sharper framing, and the next best step.\n\n"
-        f"{context_text}\n\n"
-        f"Reviewer critique:\n{reviewer_output}"
-    )
-    try:
-        return _call_ollama(prompt, model=model, base_url=base_url), None
-    except Exception as exc:
-        return (
-            "Reflection note:\n"
-            "- tighten conclusions to repository-backed claims\n"
-            "- verify the strongest missing source or mirror note\n"
-            "- prefer one next action over a wide todo list",
-            f"reflection loop fell back to heuristic mode ({type(exc).__name__}: {exc}).",
-        )
-
-
-def _run_final(
-    query: str,
-    context_text: str,
-    roles: dict[str, dict[str, str]],
-    reflections: list[str],
-    *,
-    model: str,
-    base_url: str,
-) -> tuple[str, str | None]:
-    prompt = (
-        "You are the synthesis stage of a local research agent.\n"
-        "Combine researcher, coder, reviewer, and reflection outputs into one final answer.\n"
-        "Keep it repository-grounded and action-oriented.\n\n"
-        f"{context_text}\n\n"
-        f"Researcher:\n{roles['researcher']['content']}\n\n"
-        f"Coder:\n{roles['coder']['content']}\n\n"
-        f"Reviewer:\n{roles['reviewer']['content']}\n\n"
-        "Reflections:\n"
-        + "\n\n".join(reflections)
-    )
-    try:
-        return _call_ollama(prompt, model=model, base_url=base_url), None
-    except Exception as exc:
-        return (
-            "Final synthesis:\n"
-            f"- query: {query}\n"
-            "- use the researcher output as the working summary\n"
-            "- use the coder output as the implementation plan\n"
-            "- use the reviewer and reflection outputs as the verification checklist",
-            f"final synthesis fell back to heuristic mode ({type(exc).__name__}: {exc}).",
-        )
 
 
 def run_think_loop(config: ResearchRunConfig) -> dict:
-    logger.info("Starting research loop for query: {}", config.query)
+    logger.info("Starting research bundle preparation for query: {}", config.query)
     warnings: list[str] = []
     session_id = config.session_id or _default_session_id(config.query)
     store = MemoryStore(config.paths)
@@ -247,7 +152,7 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         vault_results = vault_payload.get("results", [])
         warnings.extend(vault_payload.get("warnings", []))
     except Exception as exc:
-        logger.warning("Vault retrieval unavailable inside research loop.")
+        logger.warning("Vault retrieval unavailable inside research bundle builder.")
         warnings.append(f"vault retrieval unavailable ({type(exc).__name__}: {exc}).")
 
     graph_results: list[dict] = []
@@ -260,7 +165,7 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         graph_results = graph_payload.get("results", [])
         warnings.extend(graph_payload.get("warnings", []))
     except Exception as exc:
-        logger.warning("Graph retrieval unavailable inside research loop.")
+        logger.warning("Graph retrieval unavailable inside research bundle builder.")
         warnings.append(f"graph retrieval unavailable ({type(exc).__name__}: {exc}).")
 
     pdf_results: list[dict] = []
@@ -276,7 +181,7 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         pdf_results = pdf_payload.get("results", [])
         warnings.extend(pdf_payload.get("warnings", []))
     except Exception as exc:
-        logger.warning("PDF retrieval unavailable inside research loop.")
+        logger.warning("PDF retrieval unavailable inside research bundle builder.")
         warnings.append(f"pdf retrieval unavailable ({type(exc).__name__}: {exc}).")
 
     graph_paths, graph_path_warnings = _collect_graph_paths(vault_results)
@@ -290,75 +195,44 @@ def run_think_loop(config: ResearchRunConfig) -> dict:
         pdf_results=pdf_results,
         memory_results=memory_results,
     )
-
-    roles: dict[str, dict[str, str]] = {}
-    for role in ("researcher", "coder", "reviewer"):
-        logger.debug("Running role step: {}", role)
-        content, warning = _run_role(
-            role,
-            config.query,
-            context_text,
-            model=config.model,
-            base_url=config.ollama_base_url,
-        )
-        roles[role] = {"content": content}
-        if warning:
-            warnings.append(warning)
-
-    reflections: list[str] = []
-    for _ in range(config.reflection_rounds):
-        logger.debug("Running reflection step.")
-        reflection, warning = _run_reflection(
-            config.query,
-            context_text,
-            roles["reviewer"]["content"],
-            model=config.model,
-            base_url=config.ollama_base_url,
-        )
-        reflections.append(reflection)
-        if warning:
-            warnings.append(warning)
-
-    final_answer, warning = _run_final(
+    summary = _make_bundle_summary(
         config.query,
-        context_text,
-        roles,
-        reflections,
-        model=config.model,
-        base_url=config.ollama_base_url,
+        vault_results=vault_results,
+        graph_results=graph_results,
+        graph_paths=graph_paths,
+        pdf_results=pdf_results,
+        memory_results=memory_results,
     )
-    if warning:
-        warnings.append(warning)
+    agent_handoff = _make_agent_handoff(config.query, context_text)
 
     payload = {
         "session_id": session_id,
         "created_at": datetime.now(UTC).isoformat(),
         "query": config.query,
-        "model": config.model,
+        "mode": "retrieval_bundle",
         "warnings": warnings,
+        "summary": summary,
+        "agent_handoff": agent_handoff,
         "vault_results": vault_results,
         "graph_results": graph_results,
         "graph_paths": graph_paths,
         "pdf_results": pdf_results,
         "memory_results": memory_results,
-        "roles": roles,
-        "reflections": reflections,
-        "final_answer": final_answer,
+        "final_answer": summary,
     }
 
     if config.save_memory:
-        summary = roles["researcher"]["content"]
         store.append(
             {
                 "session_id": session_id,
                 "created_at": payload["created_at"],
                 "query": config.query,
                 "summary": summary,
-                "final_answer": final_answer,
+                "final_answer": summary,
             }
         )
         store.save_session(session_id, payload)
-        logger.info("Saved research session artifacts for session {}", session_id)
+        logger.info("Saved research bundle artifacts for session {}", session_id)
 
-    logger.info("Finished research loop for query: {}", config.query)
+    logger.info("Finished research bundle preparation for query: {}", config.query)
     return payload

@@ -40,7 +40,7 @@ Current capabilities:
 - search vault content with vector, FTS, or hybrid retrieval
 - index local PDFs with multiple parser backends
 - search PDF content with optional reranking over a wider candidate pool
-- run a local multi-step research loop through `think`
+- build external-agent retrieval bundles through `think`
 - expose the stack over MCP
 - read, list, write, and experiment on notes through MCP tools
 - validate active indexes and follow fallback pointer files
@@ -85,6 +85,29 @@ Canonical Windows-from-WSL pattern:
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run ..."
 ```
+
+Environment invariants:
+
+- `.venv` is the single canonical local environment and it must be the Windows layout with `.venv/Scripts/python.exe`
+- from `WSL`, create, recreate, sync, and verify `.venv` through `cmd.exe`, not through `.venv/bin/python`
+- if `.venv/bin/`, `.venv/lib/`, or `.venv/lib64/` appear, treat that as a broken state and repair the environment before running indexing or verification
+- when Node/npm tooling matters for local workflow compatibility, prefer invoking `npm` and `npx` through Windows `cmd.exe`
+- distinguish the actual Node runtime before documenting markdownlint behavior:
+  - current `WSL`-side `node` is `v18.19.1`
+  - current Windows-side `node` via `cmd.exe` is `v20.20.2`, and that Windows runtime is the canonical local runtime for this repository
+- current checked markdownlint path:
+  - Windows-side `cmd.exe /c "npx --yes markdownlint-cli ..."` is working and should be treated as the normal path
+- recovery note:
+  - do not launch multiple Windows-side `npx` installs in parallel against the same shared cache
+  - if `%LocalAppData%\\npm-cache\\_npx` starts producing `TAR_ENTRY_ERROR`, `EPERM`, or `MODULE_NOT_FOUND`, clear that `_npx` directory and rerun the command once, sequentially
+
+Recovery sequence for a broken canonical `.venv`:
+
+1. stop Windows processes still holding `.venv/Scripts/python.exe`
+2. remove `.venv`
+3. recreate it with `cmd.exe /c "cd /d %CD% && uv venv .venv --python 3.12"`
+4. resync it with `cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv sync --all-groups --python 3.12"`
+5. verify it with `cmd.exe /c "cd /d %CD% && .venv\\Scripts\\python.exe -V"`
 
 Examples:
 
@@ -177,7 +200,8 @@ Use this Python wrapper when you want a reusable local helper around `fetch-pdfs
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains think \"summarize the main retrieval gaps in this vault\""
 ```
 
-- the research loop now includes graph context and short graph path explanations when the vault results expose connected notes
+- `think` now prepares a retrieval bundle for an external agent instead of running a local Ollama synthesis step
+- the bundle includes graph context and short graph path explanations when the vault results expose connected notes
 - `find_related_notes` can now attach graph evidence for candidate note relationships
 
 ### MCP
@@ -225,9 +249,10 @@ For most knowledge tasks, the intended order is:
 
 1. retrieve with `search_vault` and/or `search_pdfs`
 2. inspect exact notes with `read_note`
-3. synthesize with `think` or `run_experiment`
-4. write back through `write_note` when an explicit update is needed
-5. refresh or validate indexes only when retrieval state changed
+3. prepare a bundle with `think` or `run_experiment`
+4. synthesize outside `/.brains` with the external agent
+5. write back through `write_note` when an explicit update is needed
+6. refresh or validate indexes only when retrieval state changed
 
 ## Configuration
 
@@ -248,7 +273,7 @@ Environment variables use the `BRAINS_` prefix, for example:
 - `BRAINS_VAULT__INDEX_ROOT`
 - `BRAINS_GRAPH__GOVERNANCE_FILES`
 - `BRAINS_HEALTH__VAULT_PROBE_QUERY`
-- `BRAINS_RESEARCH__MODEL`
+- `BRAINS_RESEARCH__VAULT_K`
 
 Repository-specific graph and health defaults now live in TOML as well:
 
@@ -333,6 +358,11 @@ Mypy guidance for this repository:
 - if mypy appears to hang, diagnose third-party import traversal first
 - for repeatable diagnosis, use `/.brains/scripts/diagnose_mypy_hang.py`
 
+PyTorch/CUDA guidance:
+
+- `torch` and `torchvision` are pinned to the explicit PyTorch `cu128` index on Windows so `uv lock` / `uv sync` keep a GPU-enabled build in the canonical `/.venv`
+- after environment rebuilds, verify GPU access with a direct `torch.cuda.is_available()` probe from `.venv\\Scripts\\python.exe`
+
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest tests/test_cli.py -q"
 ```
@@ -342,6 +372,9 @@ Run full test suite only when needed:
 ```bash
 cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest tests -q"
 ```
+
+- the checked-in pytest config already reports the slowest tests and enables a faulthandler timeout for the full suite
+- use the plain full-suite command above before adding extra timing/debug flags
 
 For indexing, parsing, chunking, manifest, or retrieval changes, default verification is broader than unit tests:
 

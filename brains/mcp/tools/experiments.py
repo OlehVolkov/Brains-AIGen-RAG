@@ -37,7 +37,6 @@ def run_experiment_tool(
     save_memory: bool = True,
     vault_k: int | None = None,
     pdf_k: int | None = None,
-    reflection_rounds: int | None = None,
     repo_root: Path | None = None,
 ) -> dict[str, object]:
     base_repo_root = repo_root or default_repo_root()
@@ -53,7 +52,6 @@ def run_experiment_tool(
             query=query,
             vault_k=vault_k,
             pdf_k=pdf_k,
-            reflection_rounds=reflection_rounds,
             session_id=experiment_id,
             save_memory=save_memory,
         )
@@ -78,6 +76,7 @@ def run_experiment_tool(
         "query": query,
         "name": name,
         "description": description,
-        "final_answer": result["final_answer"],
+        "summary": result["summary"],
+        "agent_handoff": result["agent_handoff"],
         "warnings": result.get("warnings", []),
     }

@@ -26,18 +26,9 @@ def register_research_commands(app: typer.Typer) -> None:
             str | None,
             typer.Option(help="Directory under /.brains/.index for research memory."),
         ] = None,
-        model: Annotated[str | None, typer.Option(help="Ollama chat model name.")] = None,
-        ollama_base_url: Annotated[
-            str | None,
-            typer.Option(help="Base URL for the local Ollama server."),
-        ] = None,
         vault_k: Annotated[int | None, typer.Option(help="Number of vault hits to retrieve.")] = None,
         pdf_k: Annotated[int | None, typer.Option(help="Number of PDF hits to retrieve.")] = None,
         memory_k: Annotated[int | None, typer.Option(help="Number of memory hits to recall.")] = None,
-        reflection_rounds: Annotated[
-            int | None,
-            typer.Option(help="Number of self-reflection rounds."),
-        ] = None,
         session_id: Annotated[str | None, typer.Option(help="Optional explicit session id.")] = None,
         save_memory: Annotated[
             bool,
@@ -53,12 +44,9 @@ def register_research_commands(app: typer.Typer) -> None:
             ResearchRunConfig.from_settings(
                 paths=resolve_research_paths(index_root=index_root),
                 query=query,
-                model=model,
-                ollama_base_url=ollama_base_url,
                 vault_k=vault_k,
                 pdf_k=pdf_k,
                 memory_k=memory_k,
-                reflection_rounds=reflection_rounds,
                 session_id=session_id,
                 save_memory=save_memory,
             )

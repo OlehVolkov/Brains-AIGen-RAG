@@ -120,6 +120,9 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - `uv python install 3.12`
 - Use the Windows virtual environment at `.venv` as the single canonical local environment.
 - Even when the agent is currently running from `WSL`, create, recreate, and sync `.venv` through Windows `cmd.exe` with `uv`.
+- Do not run canonical `.venv` lifecycle commands from the Linux side of `WSL`; for this repository that prohibition covers `uv venv`, `uv sync`, `uv run`, and direct use of `.venv/bin/python`.
+- Treat `.venv/bin/`, `.venv/lib/`, or `.venv/lib64/` as evidence of a broken environment in this repository, not as an acceptable alternative layout.
+- If `.venv/Scripts/python.exe` is missing, or if Linux-style `.venv` directories appear beside it, stop and repair the environment before running indexing, health checks, linting, typing, or tests.
 - Do not introduce or keep parallel canonical environments such as `.venvx`.
 - In `cmd.exe`, call `uv` directly from `PATH`; do not hardcode an absolute path to `uv.exe`.
 - When Docker is needed for local services or tooling, invoke it through Windows `cmd.exe` too.
@@ -143,8 +146,15 @@ Local instructions for agents working on the repository's `brains` tooling and i
 - `uvx` is for one-off external Python CLI tools that should not be installed into the project environment.
 - `npx` is for one-off Node/npm CLI tools.
 - Use `npx` for non-Python tools such as `markdownlint-cli`; do not route npm tools through `uvx`.
+- When Node/npm tooling matters for local workflow compatibility, prefer invoking `npm` and `npx` through Windows `cmd.exe`.
+- Distinguish the actual Node runtime before documenting markdownlint behavior:
+  - current `WSL`-side `node` is `v18.19.1`,
+  - current Windows-side `node` via `cmd.exe` is `v20.20.2`, and that Windows runtime is the canonical local runtime for this repository.
+- Current checked markdownlint path:
+  - Windows-side `cmd.exe /c "npx --yes markdownlint-cli ..."` is working and should be treated as the normal path.
 - For `/.brains` helper scripts that belong to the normal local workflow, prefer portable Python wrappers over shell-only wrappers when practical.
 - For literature PDF download/reindex workflow, treat `/.brains/scripts/fetch_literature_pdfs.py` as the canonical reusable wrapper around `brains fetch-pdfs --reindex`.
+- On Windows, keep `torch` and `torchvision` pinned to the explicit PyTorch `cu128` index in `pyproject.toml` so `uv lock` / `uv sync` do not silently fall back to CPU-only wheels.
 - Keep code changes in `/.brains` small, local, and automation-focused.
 - Before adding or keeping a Python dependency, verify that it is actually needed by the current codebase.
 - Prefer checking this explicitly via import search / usage search instead of assuming a package is still needed after refactors.
@@ -155,6 +165,9 @@ Local instructions for agents working on the repository's `brains` tooling and i
   - `uv run ruff check brains tests`
   - `uv run mypy brains`
   - targeted `uv run pytest ...`
+- The checked-in pytest configuration already enables slow-test reporting and a faulthandler timeout for the full suite.
+- When the whole suite is required, use the plain canonical command `uv run pytest tests -q`; do not add extra timing flags in routine runs unless you are debugging pytest itself.
+- If GPU support matters for local ML tooling, verify it after `uv sync` with a direct `torch.cuda.is_available()` check from `.venv\\Scripts\\python.exe`.
 - Treat `uv run mypy brains` as the canonical type-check command for this module.
 - Keep the checked-in mypy configuration runnable as-is in the standard local environment; avoid relying on ad hoc flags for routine verification unless you are explicitly changing the mypy configuration.
 - Keep `follow_imports = "skip"` as the default mypy policy unless a later verified change proves that full import following is stable in this repository.
@@ -162,6 +175,12 @@ Local instructions for agents working on the repository's `brains` tooling and i
 - If mypy appears to hang, first suspect third-party import traversal before assuming a local typing regression.
 - For repeatable diagnosis, use `/.brains/scripts/diagnose_mypy_hang.py` instead of one-off shell probing.
 - Do not remove the mypy import-skipping safeguards for those heavy third-party packages unless a real `uv run mypy brains` run succeeds after the change.
+- If the canonical `.venv` becomes inconsistent, recover it in this order:
+  - stop Windows processes still holding `.venv\\Scripts\\python.exe`,
+  - remove `.venv`,
+  - recreate it with `cmd.exe /c "cd /d %CD% && uv venv .venv --python 3.12"`,
+  - resync with `cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv sync --all-groups --python 3.12"`,
+  - verify with `cmd.exe /c "cd /d %CD% && .venv\\Scripts\\python.exe -V"`.
 - Use full `uv run pytest tests -q` only when the whole suite is needed.
 - Prefer adding code to the existing package slices:
   - `brains/config/`
@@ -228,7 +247,8 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest 
 - `brains/sources/pdf/` contains parser routing, fetch, indexing, retrieval, and reranking logic for PDFs.
 - `brains/sources/pdf/backends/` contains isolated parser backends (`PyMuPDF`, `pdfplumber`, optional `Grobid`, optional `marker`).
 - `brains/sources/vault/` contains markdown file discovery, section splitting, indexing, retrieval, and related-note logic.
-- `brains/research/` contains the multi-role research loop, memory handling, reflection steps, report formatting, and run models.
+- `brains/research/` contains retrieval-bundle orchestration, memory handling, report formatting, and external-agent handoff text.
+- `brains/research/` must not reintroduce local Ollama synthesis as the default research backend; `think` and `run_experiment` are retrieval-bundle builders for an external agent.
 - `brains/mcp/tools/` is the canonical home for MCP note, search, and experiment handlers.
 - Keep files readable: prefer extracting cohesive submodules before a file becomes long or mixed-responsibility.
 - `README.md` explains how to use the local project.
@@ -258,19 +278,3 @@ cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run pytest 
 - Under restricted sandbox environments, `LanceDB` may also hang during `connect()` or `open_table()` even when the fallback index under `/tmp/...` is valid.
 - Use `brains check-index` to validate the active PDF or vault index, and make sure the command follows `active_index.json` when present.
 - If `brains check-index` reports `status: timeout`, rerun it outside the sandbox before treating the index as corrupted.
-
-## MCP Roadmap
-
-- Treat the current `search-vault` capability as `MCP Stage 1`:
-  - `RAG`
-  - vault search over indexed markdown content
-- Treat the next tool surface as `MCP Stage 2`:
-  - `read_note`
-  - `write_note`
-  - `list_notes`
-  - `run_experiment`
-- The baseline `Stage 2` tool surface is now implemented.
-- When extending `/.brains`, prefer building additional `Stage 2` behavior on top of the existing retrieval/index foundations instead of bypassing them.
-- `read_note` and `list_notes` should preserve the canonical vault structure and avoid introducing a parallel note abstraction.
-- `write_note` must preserve bilingual mirror rules, explicit target paths, and reviewable updates.
-- `run_experiment` should produce reproducible outputs, explicit manifests, and repository-safe artifacts under `/.brains/.index` when applicable.

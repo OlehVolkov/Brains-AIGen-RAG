@@ -560,15 +560,12 @@ def test_think_command_json_output(monkeypatch) -> None:
         return {
             "session_id": "demo-session",
             "query": config.query,
-            "roles": {
-                "researcher": {"content": "r"},
-                "coder": {"content": "c"},
-                "reviewer": {"content": "v"},
-            },
-            "reflections": [],
-            "final_answer": "done",
+            "summary": "done",
+            "agent_handoff": "handoff",
             "warnings": [],
             "vault_results": [],
+            "graph_results": [],
+            "graph_paths": [],
             "pdf_results": [],
             "memory_results": [],
         }

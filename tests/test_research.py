@@ -47,7 +47,7 @@ def test_memory_store_roundtrip(tmp_path: Path) -> None:
     assert session_path.exists()
 
 
-def test_run_think_loop_falls_back_and_saves_memory(monkeypatch, tmp_path: Path) -> None:
+def test_run_think_loop_builds_bundle_and_saves_memory(monkeypatch, tmp_path: Path) -> None:
     paths = make_research_paths(tmp_path)
 
     monkeypatch.setattr(
@@ -82,28 +82,24 @@ def test_run_think_loop_falls_back_and_saves_memory(monkeypatch, tmp_path: Path)
             "warnings": [],
         },
     )
-    monkeypatch.setattr(
-        "brains.research.orchestration._call_ollama",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")),
-    )
-
     payload = run_think_loop(
         ResearchRunConfig(
             paths=paths,
             query="pairformer",
             session_id="pairformer-session",
-            reflection_rounds=1,
         )
     )
 
     assert payload["session_id"] == "pairformer-session"
-    assert "heuristic mode" in " ".join(payload["warnings"])
+    assert payload["mode"] == "retrieval_bundle"
+    assert "Prepared external-agent retrieval bundle" in payload["summary"]
+    assert "External agent handoff:" in payload["agent_handoff"]
     assert payload["graph_results"][0]["source_path"] == "EN/Graph.md"
     assert paths.memory_path.exists()
     assert (paths.sessions_dir / "pairformer-session.json").exists()
 
 
-def test_format_think_report_renders_roles() -> None:
+def test_format_think_report_renders_bundle_sections() -> None:
     rendered = format_think_report(
         {
             "session_id": "demo",
@@ -121,17 +117,12 @@ def test_format_think_report_renders_roles() -> None:
             ],
             "pdf_results": [],
             "memory_results": [],
-            "roles": {
-                "researcher": {"content": "research"},
-                "coder": {"content": "code"},
-                "reviewer": {"content": "review"},
-            },
-            "reflections": ["reflect"],
-            "final_answer": "final",
+            "summary": "bundle summary",
+            "agent_handoff": "handoff text",
         }
     )
-    assert "## Researcher" in rendered
     assert "### Graph" in rendered
     assert "### Graph Paths" in rendered
-    assert "## Reflections" in rendered
-    assert "final" in rendered
+    assert "## Summary" in rendered
+    assert "## Agent Handoff" in rendered
+    assert "bundle summary" in rendered

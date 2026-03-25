@@ -181,6 +181,15 @@ def _split_large_block(
     start_chunk_index: int,
 ) -> list[Document]:
     from langchain_core.documents import Document
+
+    if str(document.metadata.get("block_kind", "paragraph")) == "code_block":
+        return _split_large_code_block(
+            document,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            start_chunk_index=start_chunk_index,
+        )
+
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
     splitter = RecursiveCharacterTextSplitter(
@@ -200,6 +209,84 @@ def _split_large_block(
         metadata["block_count"] = 1
         metadata["chunk_kind"] = str(document.metadata.get("block_kind", "paragraph"))
         prepared.append(Document(page_content=payload, metadata=metadata))
+    return prepared
+
+
+def _split_large_code_block(
+    document: Document,
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+    start_chunk_index: int,
+) -> list[Document]:
+    from langchain_core.documents import Document
+
+    lines = document.page_content.splitlines()
+    if not lines:
+        return [_make_chunk_document([document], chunk_index=start_chunk_index)]
+
+    opening = lines[0] if lines[0].strip().startswith(("```", "~~~")) else "```"
+    closing = opening[:3]
+    body_lines = lines[1:]
+    if body_lines and body_lines[-1].strip().startswith(closing):
+        body_lines = body_lines[:-1]
+
+    prepared: list[Document] = []
+    chunk_lines: list[str] = []
+    chunk_index = start_chunk_index
+    overlap_target = max(0, chunk_overlap)
+
+    def payload_for(candidate_lines: list[str]) -> str:
+        block_text = "\n".join([opening, *candidate_lines, closing])
+        split_doc = Document(page_content=block_text, metadata=dict(document.metadata))
+        return normalize_text("\n\n".join([_context_prefix(document.metadata), _block_text_for_chunk(split_doc)]))
+
+    def flush() -> None:
+        nonlocal chunk_lines, chunk_index
+        if not chunk_lines:
+            return
+        block_text = "\n".join([opening, *chunk_lines, closing])
+        metadata = dict(document.metadata)
+        payload = normalize_text(
+            "\n\n".join(
+                [
+                    _context_prefix(metadata),
+                    _block_text_for_chunk(Document(page_content=block_text, metadata=metadata)),
+                ]
+            )
+        )
+        metadata["chunk_index"] = chunk_index
+        metadata["char_count"] = len(payload)
+        metadata["word_count"] = len(payload.split())
+        metadata["block_count"] = 1
+        metadata["chunk_kind"] = "code_block"
+        prepared.append(Document(page_content=payload, metadata=metadata))
+        chunk_index += 1
+
+        if overlap_target <= 0:
+            chunk_lines = []
+            return
+        kept: list[str] = []
+        kept_chars = 0
+        for line in reversed(chunk_lines):
+            kept.insert(0, line)
+            kept_chars += len(line) + 1
+            if kept_chars >= overlap_target:
+                break
+        chunk_lines = kept
+
+    for line in body_lines or [""]:
+        candidate = [*chunk_lines, line]
+        if chunk_lines and len(payload_for(candidate)) > chunk_size:
+            flush()
+            candidate = [*chunk_lines, line]
+            if chunk_lines and len(payload_for(candidate)) > chunk_size:
+                chunk_lines = [line]
+                flush()
+                continue
+        chunk_lines = candidate
+
+    flush()
     return prepared
 
 
