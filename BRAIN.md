@@ -23,6 +23,8 @@ Treat hand-authored repository content as the source of truth.
 
 - notes and governance files are authoritative
 - `/.brains/.index` is derived data only
+- `/.brains/.cache` and `/.brains/.tmp` are local development artifacts only
+- `/.brains/.cache/huey` is the local queue/runtime state for background `brains tasks ...` execution
 - search results, embeddings, manifests, and pointers are implementation artifacts
 - do not treat generated artifacts as canonical knowledge
 

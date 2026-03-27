@@ -11,7 +11,13 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
 )
 
-from brains.config.models import BrainsConfig, BrainsPaths, GraphPaths, ResearchPaths
+from brains.config.models import (
+    BackgroundPaths,
+    BrainsConfig,
+    BrainsPaths,
+    GraphPaths,
+    ResearchPaths,
+)
 from brains.config.sources import CombinedTomlSource
 
 
@@ -224,4 +230,25 @@ def resolve_graph_paths(
         index_root=resolved_index_root,
         graph_path=resolved_index_root / graph_filename,
         manifest_path=resolved_index_root / "manifest.json",
+    )
+
+
+def resolve_background_paths(
+    *,
+    queue_path: str | Path | None = None,
+    jobs_root: str | Path | None = None,
+) -> BackgroundPaths:
+    config = get_config()
+    current_repo_root = repo_root()
+    return BackgroundPaths(
+        repo_root=current_repo_root,
+        brains_root=brains_root(),
+        queue_path=resolve_repo_path(
+            current_repo_root,
+            queue_path or config.tasks.queue_path,
+        ),
+        jobs_root=resolve_repo_path(
+            current_repo_root,
+            jobs_root or config.tasks.jobs_root,
+        ),
     )

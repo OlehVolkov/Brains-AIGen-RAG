@@ -10,6 +10,7 @@ from brains.commands import graph as graph_commands
 from brains.commands import health as health_commands
 from brains.commands import pdf as pdf_commands
 from brains.commands import research as research_commands
+from brains.commands import tasks as task_commands
 from brains.commands import vault as vault_commands
 from brains.config import BrainsPaths, GraphPaths, ResearchPaths
 
@@ -55,6 +56,7 @@ def test_main_help_shows_commands() -> None:
     assert "explain-path" in result.output
     assert "search-graph" in result.output
     assert "think" in result.output
+    assert "tasks" in result.output
     assert "index-vault" in result.output
     assert "search-vault" in result.output
 
@@ -658,3 +660,96 @@ def test_search_vault_command_forwards_auto_mode_and_thresholds(monkeypatch) -> 
     assert captured["config"].mode == "auto"
     assert captured["config"].min_score == 0.6
     assert captured["config"].max_distance == 0.7
+
+
+def test_tasks_enqueue_command_forwards_extra_args(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_enqueue_cli_job(command, *, label=None):
+        captured["command"] = command
+        captured["label"] = label
+        return {
+            "job_id": "demo-job",
+            "status": "queued",
+            "label": label,
+            "command": command,
+            "stdout_path": ".brains/.cache/huey/jobs/demo-job/stdout.txt",
+            "stderr_path": ".brains/.cache/huey/jobs/demo-job/stderr.txt",
+        }
+
+    monkeypatch.setattr(task_commands, "enqueue_cli_job", fake_enqueue_cli_job)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["tasks", "enqueue", "--label", "pdf-reindex", "fetch-pdfs", "--reindex", "--json-output"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["job_id"] == "demo-job"
+    assert captured["label"] == "pdf-reindex"
+    assert captured["command"] == ["fetch-pdfs", "--reindex"]
+
+
+def test_tasks_status_command_json_output(monkeypatch) -> None:
+    def fake_load_job_record(job_id):
+        assert job_id == "demo-job"
+        return {
+            "job_id": job_id,
+            "status": "running",
+            "label": "graph-index",
+            "command": ["index-graph"],
+            "stdout_path": ".brains/.cache/huey/jobs/demo-job/stdout.txt",
+            "stderr_path": ".brains/.cache/huey/jobs/demo-job/stderr.txt",
+        }
+
+    monkeypatch.setattr(task_commands, "load_job_record", fake_load_job_record)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["tasks", "status", "demo-job", "--json-output"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["status"] == "running"
+    assert payload["command"] == ["index-graph"]
+
+
+def test_tasks_list_command_json_output(monkeypatch) -> None:
+    def fake_list_job_records(*, limit):
+        assert limit == 5
+        return [
+            {
+                "job_id": "job-1",
+                "status": "queued",
+                "label": None,
+                "command": ["index-vault"],
+            }
+        ]
+
+    monkeypatch.setattr(task_commands, "list_job_records", fake_list_job_records)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["tasks", "list", "--limit", "5", "--json-output"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["jobs"][0]["job_id"] == "job-1"
+
+
+def test_tasks_output_command_uses_requested_stream(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_get_job_output(job_id, *, stream="stdout"):
+        captured["job_id"] = job_id
+        captured["stream"] = stream
+        return "worker output"
+
+    monkeypatch.setattr(task_commands, "get_job_output", fake_get_job_output)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["tasks", "output", "demo-job", "--stream", "stderr"])
+
+    assert result.exit_code == 0
+    assert "worker output" in result.output
+    assert captured == {"job_id": "demo-job", "stream": "stderr"}

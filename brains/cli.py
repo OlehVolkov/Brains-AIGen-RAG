@@ -9,6 +9,7 @@ from brains.commands import (
     register_mcp_commands,
     register_pdf_commands,
     register_research_commands,
+    register_task_commands,
     register_vault_commands,
 )
 
@@ -28,6 +29,7 @@ register_health_commands(app)
 register_mcp_commands(app)
 register_pdf_commands(app)
 register_research_commands(app)
+register_task_commands(app)
 register_vault_commands(app)
 
 

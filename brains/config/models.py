@@ -158,6 +158,13 @@ class ResearchConfig(BaseModel):
     memory_k: int = 3
 
 
+class TasksConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    queue_path: str = ".brains/.cache/huey/queue.db"
+    jobs_root: str = ".brains/.cache/huey/jobs"
+
+
 class BrainsConfig(BaseSettings):
     model_config = SettingsConfigDict(
         frozen=True,
@@ -174,6 +181,7 @@ class BrainsConfig(BaseSettings):
     graph: GraphConfig = Field(default_factory=GraphConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
+    tasks: TasksConfig = Field(default_factory=TasksConfig)
 
 
 class BrainsPaths(BaseModel):
@@ -206,3 +214,12 @@ class GraphPaths(BaseModel):
     index_root: Path
     graph_path: Path
     manifest_path: Path
+
+
+class BackgroundPaths(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    repo_root: Path
+    brains_root: Path
+    queue_path: Path
+    jobs_root: Path

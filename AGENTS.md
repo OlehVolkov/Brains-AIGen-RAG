@@ -5,7 +5,10 @@ Local instructions for agents working on the repository's `brains` tooling and i
 ## Scope
 
 - `/.brains` is the home for local research tooling, helper scripts, prompts, manifests, and small automation utilities.
-- `/.brains/.index` stores generated artifacts only: indexes, caches, manifests, embeddings, and similar derived data.
+- `/.brains/.index` stores generated index artifacts only: indexes, manifests, embeddings, and similar derived data.
+- `/.brains/.cache` stores local dev-tool caches such as `pytest`, `ruff`, `mypy`, and similar package caches.
+- `/.brains/.cache/huey` stores local background-task queue state, job records, and captured stdout/stderr for `brains tasks ...`.
+- `/.brains/.tmp` stores temporary local development artifacts when a package or helper needs scratch files.
 - The Obsidian knowledge base itself stays in `UA/`, `EN/`, and root governance files.
 - Prefer the current modular package layout in `brains/`; do not collapse logic back into a few oversized files.
 

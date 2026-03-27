@@ -22,7 +22,10 @@ This repository contains:
 - CLI commands for indexing, retrieval, health checks, research runs, and MCP serving
 - MCP tools for note operations and repository-grounded retrieval
 - configuration under `config/`
-- generated artifacts under `/.brains/.index`
+- generated index artifacts under `/.brains/.index`
+- local dev-tool caches under `/.brains/.cache`
+- local background-task queue state under `/.brains/.cache/huey`
+- temporary local development artifacts under `/.brains/.tmp`
 
 The knowledge base itself remains in:
 
@@ -31,6 +34,30 @@ The knowledge base itself remains in:
 - root governance files
 
 Local PDFs belong in `PDF/`.
+
+## Background Tasks
+
+For long-running local jobs, use the built-in `Huey` queue:
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains tasks worker"
+```
+
+In another terminal, enqueue an existing CLI command:
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains tasks enqueue --label pdf-reindex -- fetch-pdfs --reindex"
+```
+
+Inspect job state or captured output:
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains tasks status <JOB_ID> --json-output"
+```
+
+```bash
+cmd.exe /c "cd /d %CD% && set \"UV_PROJECT_ENVIRONMENT=.venv\" && uv run python -m brains tasks output <JOB_ID> --stream stdout"
+```
 
 ## What It Does Today
 
@@ -421,8 +448,8 @@ This repository expects:
 
 If you are editing agent-facing behavior, also read:
 
-- [BRAIN.md](/mnt/c/__PROJECTS/__AUSTIN/brains/BRAIN.md)
-- [AGENTS.md](/mnt/c/__PROJECTS/__AUSTIN/brains/AGENTS.md)
+- `BRAIN.md`
+- `AGENTS.md`
 
 ## Short Version
 

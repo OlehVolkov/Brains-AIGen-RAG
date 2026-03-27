@@ -74,3 +74,7 @@ index_root = ".brains/.index/research"
 vault_k = 5
 pdf_k = 5
 memory_k = 3
+
+[tasks]
+queue_path = ".brains/.cache/huey/queue.db"
+jobs_root = ".brains/.cache/huey/jobs"

@@ -12,9 +12,8 @@ config/local.toml
 
 # Test and Python caches
 __pycache__/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
+.cache/
+.tmp/
 .hypothesis/
 .coverage
 .coverage.*
